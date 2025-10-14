@@ -1,43 +1,67 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# ====================================
+# 📦 Dependencies
+# ====================================
 node_modules/
+package-lock.json
 
-# Expo
+# ====================================
+# ⚙️ Expo / React Native
+# ====================================
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
 
-# Native
-.kotlin/
-*.orig.*
+# Native build folders (prebuild 생성물)
+android/
+ios/
+*.keystore
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
 
-# Metro
-.metro-health-check*
+# Gradle / Xcode / Kotlin build caches
+.gradle/
+.idea/
+.kotlin/
+build/
+*.iml
 
-# debug
+# ====================================
+# 🧩 Metro / Debug
+# ====================================
+.metro-health-check*
 npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-# macOS
+# ====================================
+# 💻 OS / Editor junk
+# ====================================
 .DS_Store
-*.pem
+Thumbs.db
 
-# local env files
+# ====================================
+# 🔐 Env / Secrets
+# ====================================
+.env
+.env.*
 .env*.local
 
-# typescript
+# ====================================
+# 🧱 TypeScript
+# ====================================
 *.tsbuildinfo
 
+# ====================================
+# 🚫 Misc
+# ====================================
+*.orig.*
+*.pem
 app-example
 
-# generated native folders
-/ios
 /android
+/ios
