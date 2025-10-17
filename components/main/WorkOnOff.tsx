@@ -1,15 +1,15 @@
 import WorkOnOffService, { WeeklyWorkOnOffResponse, WorkType, workTypes } from '@/api/workOnOff/workOnOffService';
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
 import dayjs, { Dayjs } from 'dayjs';
-import { useRouter } from 'expo-router';
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter /*, useFocusEffect*/ } from 'expo-router';
+import React, { memo, useCallback, useEffect, useMemo, useState /*, useRef*/ } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
   useColorScheme,
@@ -111,11 +111,9 @@ export default function WorkOnOff() {
   const fetchWeeklyData = useCallback(
     async (target: Dayjs) => {
       setIsLoading(true);
-
       try {
         const { start: s, end: e } = getWeekRange(target);
         const data = await WorkOnOffService.getWeeklyWorkOnOff(fmtDateTime(s, '00:00'), fmtDateTime(e, '23:59'));
-        console.log('data', data);
         setWeeklyData(data);
       } catch (e: any) {
         showAuthOrError(e, '출퇴근 기록을 불러오는데 실패했습니다.');
@@ -130,6 +128,13 @@ export default function WorkOnOff() {
   useEffect(() => {
     fetchWeeklyData(currentDate);
   }, [currentDate, fetchWeeklyData]);
+
+  // (선택) 화면 복귀 시 항상 최신화하고 싶다면 주석 해제
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     fetchWeeklyData(currentDate);
+  //   }, [currentDate, fetchWeeklyData]),
+  // );
 
   const goToPreviousWeek = useCallback(() => setCurrentDate((d) => d.subtract(1, 'week')), []);
   const goToNextWeek = useCallback(() => setCurrentDate((d) => d.add(1, 'week')), []);
@@ -183,15 +188,18 @@ export default function WorkOnOff() {
       const isEarly = await WorkOnOffService.checkEarlyLeave(seq);
       Alert.alert(isEarly ? '조퇴 확인' : '퇴근 확인', isEarly ? '조퇴 처리됩니다. 계속하시겠습니까?' : '퇴근하시겠습니까?', [
         { text: '취소', style: 'cancel' },
-        { text: '확인', onPress: async () => {
-          try {
-            await WorkOnOffService.workOff(seq);
-            Alert.alert('성공', '퇴근이 완료되었습니다.');
-            fetchWeeklyData(currentDate);
-          } catch (e: any) {
-            Alert.alert('오류', e?.message || '퇴근 처리에 실패했습니다.');
-          }
-        }},
+        {
+          text: '확인',
+          onPress: async () => {
+            try {
+              await WorkOnOffService.workOff(seq);
+              Alert.alert('성공', '퇴근이 완료되었습니다.');
+              fetchWeeklyData(currentDate);
+            } catch (e: any) {
+              Alert.alert('오류', e?.message || '퇴근 처리에 실패했습니다.');
+            }
+          },
+        },
       ]);
     } catch (e: any) {
       Alert.alert('오류', e?.message || '퇴근 가능 여부 확인에 실패했습니다.');
@@ -199,24 +207,24 @@ export default function WorkOnOff() {
   }, [todayState.todayRecord, currentDate, fetchWeeklyData]);
 
   return (
-    <View style={[styles.workOnOffContainer, { backgroundColor: C.background }]}>
+    <ThemedView style={[styles.workOnOffContainer, { backgroundColor: C.background }]}>
       {/* 주간 네비게이션 */}
-      <View style={[styles.navigationContainer, { backgroundColor: C.surface, borderColor: C.border }]}>
+      <ThemedView style={[styles.navigationContainer, { backgroundColor: C.surface, borderColor: C.border }]}>
         <TouchableOpacity style={[styles.navButton, { backgroundColor: C.primary }]} onPress={goToPreviousWeek} disabled={isLoading}>
-          <Text style={[styles.navButtonText, { color: C.onPrimary, fontFamily: Fonts.sans }]}>◀</Text>
+          <ThemedText style={[styles.navButtonText, { color: C.onPrimary, fontFamily: Fonts.sans }]}>◀</ThemedText>
         </TouchableOpacity>
 
         <View style={styles.dateContainer}>
-          <Text style={[styles.dateText, { color: C.text, fontFamily: Fonts.sans }]}>{fmtDisplayDate(currentDate)}</Text>
-          <Text style={[styles.weekRangeText, { color: C.textDim, fontFamily: Fonts.sans }]}>
+          <ThemedText style={[styles.dateText, { color: C.text, fontFamily: Fonts.sans }]}>{fmtDisplayDate(currentDate)}</ThemedText>
+          <ThemedText style={[styles.weekRangeText, { color: C.textDim, fontFamily: Fonts.sans }]}>
             {start.format('MM/DD')} ~ {end.format('MM/DD')}
-          </Text>
+          </ThemedText>
         </View>
 
         <TouchableOpacity style={[styles.navButton, { backgroundColor: C.primary }]} onPress={goToNextWeek} disabled={isLoading}>
-          <Text style={[styles.navButtonText, { color: C.onPrimary, fontFamily: Fonts.sans }]}>▶</Text>
+          <ThemedText style={[styles.navButtonText, { color: C.onPrimary, fontFamily: Fonts.sans }]}>▶</ThemedText>
         </TouchableOpacity>
-      </View>
+      </ThemedView>
 
       {/* 출근/퇴근 CTA */}
       {!isLoading && (todayState.canCheckIn || todayState.canCheckOut) && (
@@ -226,8 +234,8 @@ export default function WorkOnOff() {
               style={[styles.workTypeButton, { backgroundColor: C.surface, borderColor: C.border }]}
               onPress={() => setShowWorkTypeModal(true)}
             >
-              <Text style={[styles.workTypeButtonText, { color: C.text }]}>{todayState.effectiveWorkType}</Text>
-              <Text style={[styles.workTypeButtonText, { color: C.text }]}>▼</Text>
+              <ThemedText style={[styles.workTypeButtonText, { color: C.text }]}>{todayState.effectiveWorkType}</ThemedText>
+              <ThemedText style={[styles.workTypeButtonText, { color: C.text }]}>▼</ThemedText>
             </TouchableOpacity>
 
             {todayState.canCheckIn ? (
@@ -249,7 +257,7 @@ export default function WorkOnOff() {
       {isLoading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={[styles.loadingText, { color: C.textDim }]}>주간 출퇴근 기록을 불러오는 중...</Text>
+          <ThemedText style={[styles.loadingText, { color: C.textDim }]}>주간 출퇴근 기록을 불러오는 중...</ThemedText>
         </View>
       )}
 
@@ -258,24 +266,23 @@ export default function WorkOnOff() {
         <View style={styles.recordsSection}>
           <View style={styles.gridContainer}>
             {weeklyRecords.map((d, i) => {
-              const isWeekend = d.isWeekend;
               const baseCard = [
                 styles.dayRecordItem,
                 { backgroundColor: C.surface, borderColor: C.border },
-                isWeekend && { backgroundColor: C.surfaceMuted, borderColor: C.borderMuted },
+                d.isWeekend && { backgroundColor: C.surfaceMuted, borderColor: C.borderMuted },
                 d.isToday && { backgroundColor: C.surfaceToday, borderColor: C.success },
               ];
-              const dateColor = isWeekend ? C.textMuted : C.text;
+              const dateColor = d.isWeekend ? C.textMuted : C.text;
 
               return (
-                <View key={d.dateStr ?? i} style={baseCard}>
+                <ThemedView key={d.dateStr ?? i} style={baseCard as any}>
                   <View style={styles.dayHeader}>
-                    <Text style={[styles.dayDate, { color: dateColor }]}>{d.date.format('MM/DD')}</Text>
-                    <Text style={[styles.dayName, { color: dateColor }]}>{KOREAN_WEEKDAYS[d.date.day()]}</Text>
+                    <ThemedText style={[styles.dayDate, { color: dateColor }]}>{d.date.format('MM/DD')}</ThemedText>
+                    <ThemedText style={[styles.dayName, { color: dateColor }]}>{KOREAN_WEEKDAYS[d.date.day()]}</ThemedText>
                     {d.isToday && (
-                      <View style={[styles.todayBadge, { backgroundColor: C.success }]}>
-                        <Text style={[styles.todayBadgeText, { color: C.onPrimary }]}>오늘</Text>
-                      </View>
+                      <ThemedView style={[styles.todayBadge, { backgroundColor: C.success }]}>
+                        <ThemedText style={[styles.todayBadgeText, { color: C.onPrimary }]}>오늘</ThemedText>
+                      </ThemedView>
                     )}
                   </View>
 
@@ -290,17 +297,17 @@ export default function WorkOnOff() {
 
                       {(d.record.isLate || d.record.isLeaveEarly) && (
                         <View style={styles.alertContainer}>
-                          {d.record.isLate && <Text style={[styles.alertText, { color: C.danger }]}>⚠️ 지각</Text>}
-                          {d.record.isLeaveEarly && <Text style={[styles.alertText, { color: C.danger }]}>⚠️ 조퇴</Text>}
+                          {d.record.isLate && <ThemedText style={[styles.alertText, { color: C.danger }]}>⚠️ 지각</ThemedText>}
+                          {d.record.isLeaveEarly && <ThemedText style={[styles.alertText, { color: C.danger }]}>⚠️ 조퇴</ThemedText>}
                         </View>
                       )}
                     </View>
                   ) : (
                     <View style={styles.noRecord}>
-                      <Text style={[styles.noRecordText, { color: C.textMuted }]}>기록 없음</Text>
+                      <ThemedText style={[styles.noRecordText, { color: C.textMuted }]}>기록 없음</ThemedText>
                     </View>
                   )}
-                </View>
+                </ThemedView>
               );
             })}
           </View>
@@ -309,9 +316,9 @@ export default function WorkOnOff() {
 
       {/* 근무형태 선택 모달 */}
       <Modal visible={showWorkTypeModal} transparent animationType="fade" onRequestClose={() => setShowWorkTypeModal(false)}>
-        <View style={[styles.modalOverlay, { backgroundColor: C.overlay }]}>
-          <View style={[styles.modalContainer, { backgroundColor: C.surface, borderColor: C.border }]}>
-            <Text style={[styles.modalTitle, { color: C.text }]}>근무형태 선택</Text>
+        <ThemedView style={[styles.modalOverlay, { backgroundColor: C.overlay }]}>
+          <ThemedView style={[styles.modalContainer, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <ThemedText style={[styles.modalTitle, { color: C.text }]}>근무형태 선택</ThemedText>
             {workTypes.map((workType) => {
               const { canCheckIn, effectiveWorkType } = todayState;
               const isCurrent = effectiveWorkType === workType;
@@ -328,17 +335,17 @@ export default function WorkOnOff() {
                     setShowWorkTypeModal(false);
                   }}
                 >
-                  <Text style={[styles.modalItemText, { color: isCurrent ? C.primary : C.text }]}>{workType}</Text>
+                  <ThemedText style={[styles.modalItemText, { color: isCurrent ? C.primary : C.text }]}>{workType}</ThemedText>
                 </TouchableOpacity>
               );
             })}
             <TouchableOpacity style={[styles.modalCloseButton, { borderColor: C.border }]} onPress={() => setShowWorkTypeModal(false)}>
-              <Text style={[styles.modalCloseButtonText, { color: C.text }]}>취소</Text>
+              <ThemedText style={[styles.modalCloseButtonText, { color: C.text }]}>취소</ThemedText>
             </TouchableOpacity>
-          </View>
-        </View>
+          </ThemedView>
+        </ThemedView>
       </Modal>
-    </View>
+    </ThemedView>
   );
 }
 
@@ -355,9 +362,9 @@ const Row = memo(function Row({
   dim: string;
 }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-      <Text style={{ fontSize: 12, color: dim }}>{label}</Text>
-      <Text style={{ fontSize: 12, fontWeight: '600', color }}>{value}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 0 }}>
+      <ThemedText style={{ fontSize: 12, color: dim }}>{label}</ThemedText>
+      <ThemedText style={{ fontSize: 12, fontWeight: '600', color }}>{value}</ThemedText>
     </View>
   );
 });
@@ -402,10 +409,10 @@ const makeStyles = (_C: any) =>
     dayName: { fontSize: 14, marginLeft: 8 },
     todayBadge: { borderRadius: 5, marginLeft: 10, paddingHorizontal: 6, paddingVertical: 2 },
     todayBadgeText: { fontSize: 10, fontWeight: '700' },
-    recordDetails: { flexDirection: 'column', marginTop: 8 },
+    recordDetails: { flexDirection: 'column', marginTop: 2 },
     noRecord: { alignItems: 'center', paddingVertical: 12 },
     noRecordText: { fontSize: 14 },
-    alertContainer: { flexDirection: 'row', marginTop: 8, gap: 6 },
+    alertContainer: { flexDirection: 'row', marginTop: 2, gap: 6 },
     alertText: { fontSize: 12, fontWeight: '700' },
     centerRow: { paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' },
     actionButton: {
@@ -430,7 +437,7 @@ const makeStyles = (_C: any) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingVertical: 6,
       borderRadius: 6,
       borderWidth: 1,
       minWidth: 88,
