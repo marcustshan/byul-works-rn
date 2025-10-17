@@ -7,15 +7,14 @@ import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Provider } from 'react-redux';
 
-import Header from '@/components/layout/header';
-import SideMenu from '@/components/layout/side-menu';
+import Footer from '@/components/layout/Footer';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { store } from '@/store';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const currentPath = usePathname();
-  const needToHeader = currentPath !== '/' && currentPath !== '/login';
+  const needFooter = currentPath !== '/' && currentPath !== '/login';
 
   return (
     <Provider store={store}>
@@ -24,14 +23,12 @@ export default function RootLayout() {
           <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <Stack
               screenOptions={{
-                headerShown: needToHeader,
-                header: () => <Header />,
+                headerShown: false,
               }}
             >
               <Stack.Screen name="index" />
             </Stack>
-
-            <SideMenu />
+            {needFooter && <Footer />}
             <StatusBar style="auto" />
           </SafeAreaView>
         </ThemeProvider>

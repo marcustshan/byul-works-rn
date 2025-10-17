@@ -1,40 +1,48 @@
 import { LoadingProgress } from '@/components/common/LoadingProgress';
 import { ThemedView } from '@/components/themed-view';
+import { setToken } from '@/store/authSlice';
+import { useAppDispatch } from '@/store/hooks';
+import { postLoginProcessAutoLogin } from '@/store/thunk/postLoginProcess';
 import { getStoredToken } from '@/utils/auth';
-import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet } from 'react-native';
-
 import { router } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, StyleSheet } from 'react-native';
 
 export default function LandingScreen() {
   const [isLoading, setIsLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    let isMounted = true; // 언마운트 후 setState 방지용
+    let mounted = true;
 
     const checkToken = async () => {
       try {
         const token = await getStoredToken();
-        if (!isMounted) return;
+        if (!mounted) return;
 
-        setTimeout(() => {
-          setIsLoading(false);
-          if (token) {
-            router.push('/main');
-          } else {
-            router.push('/login');
-          }
+        if (token) {
+          await dispatch(setToken(token));
+          await dispatch(postLoginProcessAutoLogin());
+        }
+
+        // 로딩 스피너 약간 보여주고 라우팅
+        timerRef.current = setTimeout(() => {
+          if (!mounted) return;
+          router.replace(token ? '/main' : '/login'); // ✅ 지역 변수 token 사용 (stale 방지)
         }, 500);
       } finally {
+        // no-op
       }
     };
 
     checkToken();
 
     return () => {
-      isMounted = false;
+      mounted = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [dispatch]);
 
   return (
     <ThemedView style={styles.container}>

@@ -1,13 +1,22 @@
-import { ThemedText } from "@/components/themed-text";
+import WorkOnOff from '@/components/main/WorkOnOff';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from "expo-router";
+import Card from "@/components/ui/Card";
+import { StyleSheet } from 'react-native';
 
 export default function Main() {
+  return (
+    <ThemedView style={styles.container}>
+      <Card title="출퇴근 관리">
+        <WorkOnOff />
+      </Card>
+    </ThemedView>
+  );
+}
 
-    return (
-      <ThemedView>
-        <ThemedText>메인화면</ThemedText>
-        <Link href="/chat/chat-list">채팅 목록</Link>
-      </ThemedView>
-    );
-  }
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+    paddingVertical: 15,
+  },
+});

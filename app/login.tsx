@@ -14,12 +14,18 @@ import {
   View,
 } from 'react-native';
 
+import authService from '@/api/authService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { ThemedView } from '@/components/themed-view';
+import { setToken, UserInfo } from '@/store/authSlice';
+import { useAppDispatch } from '@/store/hooks';
+import { postLoginProcess } from '@/store/thunk/postLoginProcess';
 import { clearToken, saveToken } from '@/utils/auth';
 
 export default function LoginScreen() {
+  const dispatch = useAppDispatch();
+
   const scheme = useColorScheme() ?? 'light';
   const isDark = scheme === 'dark';
 
@@ -56,23 +62,25 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      // TODO: 실제 로그인 API 호출
-      // const res = await fetch(`${API_BASE}/auth/login`, {...});
-      // if (!res.ok) throw new Error('로그인 실패');
-      // const { token } = await res.json();
-      await new Promise(r => setTimeout(r, 700)); // 데모 딜레이
-      const token = 'dummy_jwt_token_123';
+      const res:UserInfo = await authService.login({ id: id, password: pw });
+      if (!res.accessToken) {
+        throw new Error('로그인 실패');
+      };
 
-      console.log('autoLogin', autoLogin);
+      dispatch(setToken(res.accessToken));
 
+      const token = res.accessToken;
       if (autoLogin) {
         await saveToken(token);
       } else {
         await clearToken();
       }
 
+      await dispatch(postLoginProcess());
+
       router.replace('/main');
     } catch (e: any) {
+      console.error('로그인 실패', e);
       Alert.alert('로그인 실패', e?.message ?? '문제가 발생했습니다.');
     } finally {
       setLoading(false);
