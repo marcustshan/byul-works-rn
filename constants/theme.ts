@@ -1,7 +1,7 @@
 // theme.ts
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
+const tintColorLight = '#662D91';
 const tintColorDark = '#ffffff';
 
 export const Colors = {

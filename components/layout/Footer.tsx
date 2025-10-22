@@ -24,7 +24,7 @@ export default function Footer() {
       label: '채팅',
       icon: 'chatbubble-outline' as keyof typeof Ionicons.glyphMap,
       activeIcon: 'chatbubble' as keyof typeof Ionicons.glyphMap,
-      route: '/chat/chat-list',
+      route: '/chat/chat-room-list',
     },
     {
       id: 'schedule',

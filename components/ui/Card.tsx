@@ -120,6 +120,7 @@ const styles = StyleSheet.create({
   base: {
     // Prevent content from bleeding outside rounded corners on Android
     overflow: Platform.select({ android: 'hidden', default: 'visible' }) as 'hidden' | 'visible',
+    marginBottom: 15,
   },
   title: {
     fontSize: 18,

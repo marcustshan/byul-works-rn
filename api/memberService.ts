@@ -1,27 +1,23 @@
-import api from '@/api/api';
-import { useAppSelector } from '@/store/hooks';
+import api, { ApiErrorShape } from '@/api/api';
+import { store } from '@/store';
 import { Member } from '@/store/memberSlice';
+
+// 공통 에러 타입 (api.ts의 ApiErrorShape 사용)
+export type MemberError = ApiErrorShape;
 
 export class MemberService {
   /**
    * 모든 사용자 정보를 가져오는 메서드
    */
   static async getAllMembers(): Promise<Member[]> {
-    try {
-      
-      // 배열로 직접 응답
-      const { data } = await api.get('/system/member/listAll');
-      
-      // API 응답 검증
-      if (!Array.isArray(data)) {
-        throw new Error('사용자 정보를 가져오는데 실패했습니다.');
-      }
-
-      return data;
-    } catch (error: any) {
-      console.error(error.message || '사용자 정보를 불러오는데 실패했습니다.');
-      throw error;
+    const { data } = await api.get('/system/member/listAll');
+    
+    // API 응답 검증
+    if (!Array.isArray(data)) {
+      throw new Error('사용자 정보를 가져오는데 실패했습니다.');
     }
+
+    return data;
   }
 
   /**
@@ -30,7 +26,7 @@ export class MemberService {
    * @returns 사용자 정보 또는 undefined
    */
   static getMemberBySeq(memberSeq: number): Member | undefined {
-    const memberList= useAppSelector((state) => state.member.memberList);
+    const memberList = store.getState().member.memberList;
     return memberList?.find(member => member.memberSeq === memberSeq);
   }
 
@@ -43,7 +39,6 @@ export class MemberService {
     const member = this.getMemberBySeq(memberSeq);
     
     // 사용자 정보가 없을 때는 기본값 반환
-    
     return member ? member.name : '알 수 없음';
   }
 
@@ -63,9 +58,9 @@ export class MemberService {
    * @returns 검색된 사용자 목록
    */
   static searchMembers(query: string): Member[] {
-    const memberList= useAppSelector((state) => state.member.memberList);
+    const memberList = store.getState().member.memberList;
 
-    if (!query.trim()) return memberList|| [];
+    if (!query.trim()) return memberList || [];
     
     const lowerQuery = query.toLowerCase();
     return memberList?.filter(member => 

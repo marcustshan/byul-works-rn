@@ -1,9 +1,8 @@
 import { LoadingProgress } from '@/components/common/LoadingProgress';
 import { ThemedView } from '@/components/themed-view';
-import { setToken } from '@/store/authSlice';
 import { useAppDispatch } from '@/store/hooks';
-import { postLoginProcessAutoLogin } from '@/store/thunk/postLoginProcess';
-import { getStoredToken } from '@/utils/auth';
+import { postLoginProcess } from '@/store/thunk/postLoginProcess';
+import { getAutoLoginInfo } from '@/utils/auth';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, StyleSheet } from 'react-native';
@@ -18,18 +17,19 @@ export default function LandingScreen() {
 
     const checkToken = async () => {
       try {
-        const token = await getStoredToken();
+        const autoLoginInfo = await getAutoLoginInfo();
         if (!mounted) return;
 
-        if (token) {
-          await dispatch(setToken(token));
-          await dispatch(postLoginProcessAutoLogin());
+        if (autoLoginInfo) {
+          await dispatch(postLoginProcess({ includeMemberInfo: true }));
+        } else {
+          router.replace('/login');
         }
 
         // 로딩 스피너 약간 보여주고 라우팅
         timerRef.current = setTimeout(() => {
           if (!mounted) return;
-          router.replace(token ? '/main' : '/login'); // ✅ 지역 변수 token 사용 (stale 방지)
+          router.replace(autoLoginInfo ? '/main' : '/login'); // ✅ 지역 변수 token 사용 (stale 방지)
         }, 500);
       } finally {
         // no-op

@@ -18,10 +18,10 @@ import authService from '@/api/authService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { ThemedView } from '@/components/themed-view';
-import { setToken, UserInfo } from '@/store/authSlice';
+import { setToken, setUserInfo, UserInfo } from '@/store/authSlice';
 import { useAppDispatch } from '@/store/hooks';
 import { postLoginProcess } from '@/store/thunk/postLoginProcess';
-import { clearToken, saveToken } from '@/utils/auth';
+import { clearAutoLoginInfo, saveAutoLoginInfo } from '@/utils/auth';
 
 export default function LoginScreen() {
   const dispatch = useAppDispatch();
@@ -62,22 +62,21 @@ export default function LoginScreen() {
     try {
       setLoading(true);
 
-      const res:UserInfo = await authService.login({ id: id, password: pw });
-      if (!res.accessToken) {
+      const userInfo:UserInfo = await authService.login({ id: id, password: pw });
+      if (!userInfo.accessToken) {
         throw new Error('로그인 실패');
       };
 
-      dispatch(setToken(res.accessToken));
+      await dispatch(setToken(userInfo.accessToken));
+      await dispatch(setUserInfo(userInfo));
 
-      const token = res.accessToken;
       if (autoLogin) {
-        await saveToken(token);
+        await saveAutoLoginInfo({ id: id, password: pw });
       } else {
-        await clearToken();
+        await clearAutoLoginInfo();
       }
 
-      await dispatch(postLoginProcess());
-
+      await dispatch(postLoginProcess({ includeMemberInfo: false }));
       router.replace('/main');
     } catch (e: any) {
       console.error('로그인 실패', e);
