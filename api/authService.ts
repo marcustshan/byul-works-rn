@@ -64,8 +64,6 @@ export class AuthService {
         throw error;
       });
 
-      console.log('response', response);
-
       return response?.data;
     } catch (error) {
       console.error('[AuthService] 토큰 유효성 검증 실패:', error);

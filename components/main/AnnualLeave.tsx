@@ -3,6 +3,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAppSelector } from '@/store/hooks';
+import { getWeekdayLabel } from '@/utils/commonUtil';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
 
@@ -194,7 +195,7 @@ export default function AnnualLeaveComponent() {
                          <ThemedView key={index} style={[styles.scheduleItem, {borderLeftColor: C.primary }]}>
                            <ThemedView style={styles.scheduleItemHeader}>
                              <ThemedText style={[styles.scheduleDate, { color: C.text, fontFamily: Fonts.sans }]}>
-                                 {item.startDate}
+                                 {item.startDate} ({getWeekdayLabel(item.startDate)})
                              </ThemedText>
                              <ThemedText style={[styles.scheduleType, { color: C.primary, backgroundColor: C.surfaceToday, fontFamily: Fonts.sans }]}>{item.personalScheduleType || '연차'}</ThemedText>
                            </ThemedView>
@@ -355,7 +356,7 @@ const makeStyles = (C: any) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: 6,
       borderBottomWidth: StyleSheet.hairlineWidth,
     },
     detailLabel: {
@@ -377,7 +378,7 @@ const makeStyles = (C: any) =>
       marginBottom: 0,
     },
     scheduleListScroll: {
-      maxHeight: 300,
+      maxHeight: 200,
     },
     scrollContentContainer: {
       paddingBottom: 10,

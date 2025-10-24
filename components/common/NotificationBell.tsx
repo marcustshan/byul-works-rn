@@ -128,8 +128,8 @@ export default memo(function NotificationBellOverlay() {
             {
               backgroundColor: isDragging
                 ? (colorScheme === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)')
-                : (colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)'),
-              borderColor: colorScheme === 'dark' ? '#333' : '#e6e6e6',
+                : (colorScheme === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.1)'),
+              borderColor: colorScheme === 'dark' ? '#777' : '#e6e6e6',
             },
           ]}
         >

@@ -1,317 +1,194 @@
 // src/socket/stompClient.ts
-import { IMessage, Client as StompClient, StompSubscription } from "@stomp/stompjs";
-import { useEffect, useRef } from "react";
-import SockJS from "sockjs-client";
+import { CURRENT_ENV, getCurrentSocketConfig } from '@/constants/environment'; // 너의 파일 경로에 맞춰 수정
+import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
 
-/* ===========================
- * 타입 & 설정
- * =========================== */
+/* -------------------------------------------------------------------------- */
+/*                                   Helpers                                  */
+/* -------------------------------------------------------------------------- */
 
-export type StompStatus = "disconnected" | "connecting" | "connected" | "error";
+function httpToWs(url: string): string {
+  // http(s) -> ws(s)
+  const wsBase = url.startsWith('https')
+    ? url.replace(/^https/i, 'wss')
+    : url.replace(/^http/i, 'ws');
 
-export interface StompPaths {
-  /** Spring의 setApplicationDestinationPrefixes()에 대응 */
-  appPrefix?: string;          // default "/socket/works/app"
-  topicPrefix?: string;        // default "/topic"
-  userQueuePrefix?: string;    // default "/user/queue"
+  // Spring SockJS endpoint면 '/websocket' 트랜스포트 경로에 직접 연결
+  // (예: https://host/socket/works/endpoint -> wss://host/socket/works/endpoint/websocket)
+  return wsBase.endsWith('/websocket') ? wsBase : `${wsBase}/websocket`;
 }
 
-export interface StompOptions {
-  /** SockJS endpoint (ex: https://api.example.com/ws) */
-  url: string;
+export type ConnectOptions = {
+  token?: string;                      // JWT 있으면 Authorization 헤더에 실어 보냄
+  extraHeaders?: Record<string, any>;  // 필요한 추가 헤더
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onError?: (e: any) => void;
+};
 
-  /** 토큰 문자열 또는 토큰을 반환하는 함수(동기/비동기 모두 지원) */
-  token?: string | (() => string | Promise<string>);
+type Logger = {
+  debug?: (...args: any[]) => void;
+  info?: (...args: any[]) => void;
+  warn?: (...args: any[]) => void;
+  error?: (...args: any[]) => void;
+};
 
-  /** 연결 타임아웃(ms) */
-  timeoutMs?: number;          // default 10000
+const defaultLogger: Required<Logger> = {
+  debug: (...a) => console.debug('[STOMP]', ...a),
+  info:  (...a) => console.info('[STOMP]', ...a),
+  warn:  (...a) => console.warn('[STOMP]', ...a),
+  error: (...a) => console.error('[STOMP]', ...a),
+};
 
-  /** 하트비트(ms) */
-  heartbeatIncomingMs?: number; // default 10000
-  heartbeatOutgoingMs?: number; // default 10000
+/* -------------------------------------------------------------------------- */
+/*                              StompSocketManager                             */
+/* -------------------------------------------------------------------------- */
 
-  /** 자동 재접속 지연(ms). 0 또는 undefined면 비활성화 */
-  reconnectDelayMs?: number;    // default 3000
+export class StompSocketManager {
+  private client: Client | null = null;
+  private attempt = 0;
+  private readonly maxAttempts: number;
+  private readonly reconnectDelay: number;
+  private readonly connectTimeout: number;
+  private readonly url: string;
+  private logger: Required<Logger>;
+  private token?: string;
 
-  /** 경로 프리픽스 커스터마이즈 */
-  paths?: StompPaths;
-
-  /** 간단 로거 주입(원하면 console 전달) */
-  logger?: {
-    debug?: (...args: any[]) => void;
-    info?: (...args: any[]) => void;
-    warn?: (...args: any[]) => void;
-    error?: (...args: any[]) => void;
-  };
-}
-
-type Listener = (payload: any) => void;
-
-/** 간단 이벤트 버스 */
-class Emitter {
-  private map = new Map<string, Set<Listener>>();
-  on(event: string, cb: Listener) {
-    if (!this.map.has(event)) this.map.set(event, new Set());
-    this.map.get(event)!.add(cb);
-    return () => this.off(event, cb);
-  }
-  off(event: string, cb?: Listener) {
-    if (!this.map.has(event)) return;
-    if (!cb) return void this.map.delete(event);
-    this.map.get(event)!.delete(cb);
-  }
-  emit(event: string, data: any) {
-    const set = this.map.get(event);
-    if (!set) return;
-    for (const cb of set) cb(data);
-  }
-  clear() { this.map.clear(); }
-}
-
-/* ===========================
- * STOMP 서비스 (싱글톤)
- * =========================== */
-
-class StompService {
-  private client: StompClient | null = null;
-  private status: StompStatus = "disconnected";
-  private subs = new Map<string, StompSubscription>(); // key = logical name
-  private bus = new Emitter();
-  private opts?: Required<
-    Pick<StompOptions,
-      "url" | "timeoutMs" | "reconnectDelayMs" |
-      "heartbeatIncomingMs" | "heartbeatOutgoingMs" | "logger"
-    >
-  > & { paths: Required<StompPaths>; token?: StompOptions["token"] };
-
-  /* ===== 유틸 ===== */
-
-  private log(level: keyof NonNullable<StompOptions["logger"]>, ...args: any[]) {
-    try { this.opts?.logger?.[level]?.(...args); } catch {}
+  constructor(logger?: Logger) {
+    const cfg = getCurrentSocketConfig();
+    this.url = httpToWs(cfg.URL);
+    this.maxAttempts = cfg.MAX_RECONNECT_ATTEMPTS;
+    this.reconnectDelay = cfg.RECONNECT_DELAY;
+    this.connectTimeout = cfg.TIMEOUT;
+    this.logger = { ...defaultLogger, ...(logger ?? {}) };
   }
 
-  private async resolveToken(token: StompOptions["token"]) {
-    if (!token) return undefined;
-    if (typeof token === "function") return await token();
-    return token;
+  /** 현재 연결 여부 */
+  isConnected() {
+    return !!this.client?.connected;
   }
 
-  private buildSubscribeDest(logical: string): string {
-    // absolute path 그대로 허용
-    if (logical.startsWith("/")) return logical;
-
-    // user/queue/* 인지 구분
-    if (logical.startsWith("user/queue/")) return `/${logical}`;
-
-    // 그 외는 topic prefix 적용
-    return `${this.opts!.paths.topicPrefix}/${logical}`;
-  }
-
-  private buildPublishDest(logical: string): string {
-    // absolute path 그대로 허용
-    if (logical.startsWith("/")) return logical;
-
-    // 기본은 appPrefix + logical
-    return `${this.opts!.paths.appPrefix}/${logical}`;
-  }
-
-  /* ===== 퍼블릭 API ===== */
-
-  getState() { return this.status; }
-
-  on(event: "open" | "close" | "error" | "message", cb: Listener) {
-    return this.bus.on(event, cb);
-  }
-
-  /** 메시지 토픽 구독 (반환: 언구독 함수) */
-  subscribe(logicalTopic: string, cb: Listener) {
-    if (!this.client || this.status !== "connected") {
-      // 연결 후 재호출하거나, 필요하면 지연 큐 구현 가능
-      return () => {};
+  /** JWT 갱신 등 */
+  setToken(token?: string) {
+    this.token = token;
+    if (this.client && this.client.active) {
+      // 다음 재연결 시 반영됨. 즉시 반영 원하면 재연결 트리거 필요.
+      this.logger.info('Auth token updated (will apply on next connect)');
     }
-    const dest = this.buildSubscribeDest(logicalTopic);
-    if (this.subs.has(logicalTopic)) {
-      // 기존 동일 키 구독 제거
-      this.subs.get(logicalTopic)!.unsubscribe();
-      this.subs.delete(logicalTopic);
-    }
-    const sub = this.client.subscribe(dest, (msg: IMessage) => {
-      let payload: any = msg.body;
-      try { payload = JSON.parse(msg.body); } catch {}
-      cb(payload);
-      this.bus.emit("message", { topic: logicalTopic, payload });
-    });
-    this.subs.set(logicalTopic, sub);
-    return () => this.unsubscribe(logicalTopic);
-  }
-
-  /** 언구독 */
-  unsubscribe(logicalTopic: string) {
-    const sub = this.subs.get(logicalTopic);
-    if (sub) {
-      sub.unsubscribe();
-      this.subs.delete(logicalTopic);
-    }
-  }
-
-  /** 발행 */
-  publish(logicalDestination: string, body: any) {
-    if (!this.client || this.status !== "connected") return false;
-    const dest = this.buildPublishDest(logicalDestination);
-    const payload = typeof body === "string" ? body : JSON.stringify(body);
-    this.client.publish({ destination: dest, body: payload });
-    return true;
   }
 
   /** 연결 */
-  async connect(options: StompOptions) {
-    if (this.status === "connected" || this.status === "connecting") return;
+  async connect(opts: ConnectOptions = {}): Promise<void> {
+    const { token, extraHeaders, onConnect, onDisconnect, onError } = opts;
+    if (this.isConnected()) {
+      this.logger.info('Already connected');
+      onConnect?.();
+      return;
+    }
+    if (token) this.token = token;
 
-    const {
-      url,
-      timeoutMs = 10_000,
-      heartbeatIncomingMs = 10_000,
-      heartbeatOutgoingMs = 10_000,
-      reconnectDelayMs = 3_000,
-      paths,
-      token,
-      logger,
-    } = options;
+    this.attempt = 0;
 
-    this.opts = {
-      url,
-      timeoutMs,
-      heartbeatIncomingMs,
-      heartbeatOutgoingMs,
-      reconnectDelayMs,
-      logger: logger ?? {},
-      paths: {
-        appPrefix: paths?.appPrefix ?? "/socket/works/app",
-        topicPrefix: paths?.topicPrefix ?? "/topic",
-        userQueuePrefix: paths?.userQueuePrefix ?? "/user/queue",
+    this.client = new Client({
+      brokerURL: this.url, // RN/웹 모두 기본 WebSocket 사용
+      reconnectDelay: this.reconnectDelay, // 라이브러리 자동 재시도 간격
+      heartbeatIncoming: 15000,
+      heartbeatOutgoing: 15000,
+      // 디버그 로깅 (원하면 주석)
+      debug: (str) => {
+        if (CURRENT_ENV !== 'PRODUCTION') this.logger.debug(str);
       },
-      token,
-    };
-
-    const authToken = await this.resolveToken(token);
-    const headers: Record<string, string> = {};
-    if (authToken) headers.Authorization = authToken;
-
-    this.status = "connecting";
-
-    const sock = new (SockJS as any)(url, null, authToken ? { headers: { Authorization: authToken } } : undefined);
-
-    this.client = new StompClient({
-      webSocketFactory: () => sock as any,
-      connectHeaders: headers,
-      // stompjs가 내부 재접속 로직을 제공
-      reconnectDelay: reconnectDelayMs ?? 0, // 0 또는 undefined면 비활성화
-      connectionTimeout: timeoutMs,
-      heartbeatIncoming: heartbeatIncomingMs,
-      heartbeatOutgoing: heartbeatOutgoingMs,
-
+      // 연결 직전에 헤더 제공
+      connectHeaders: {
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+        ...(extraHeaders ?? {}),
+      },
       onConnect: () => {
-        this.status = "connected";
-        this.log("info", "✅ [STOMP] connected");
-        this.bus.emit("open", null);
+        this.logger.info('STOMP connected');
+        this.attempt = 0;
+        onConnect?.();
       },
-
       onStompError: (frame) => {
-        this.status = "error";
-        this.log("error", "❌ [STOMP] stomp error:", frame);
-        this.bus.emit("error", frame);
+        this.logger.error('Broker reported error:', frame.headers['message'], frame.body);
+        onError?.(frame);
       },
+      onWebSocketClose: (evt) => {
+        this.logger.warn('WebSocket closed', evt?.code, evt?.reason);
+        onDisconnect?.();
 
-      onWebSocketError: (err) => {
-        this.status = "error";
-        this.log("error", "❌ [STOMP] ws error:", err);
-        this.bus.emit("error", err);
+        // @stomp/stompjs 의 reconnectDelay로 자동 재시도되지만
+        // 시도 횟수를 우리가 제한하고 싶으므로 여기서 컷오프
+        this.attempt++;
+        if (this.attempt > this.maxAttempts) {
+          this.logger.error(`Max reconnect attempts exceeded (${this.maxAttempts})`);
+          // 더 이상 자동 재시도 하지 않도록 비활성화
+          this.client?.deactivate();
+        }
       },
-
-      onWebSocketClose: () => {
-        // stompjs가 reconnectDelay > 0 이면 자동 재시도함
-        this.status = "disconnected";
-        this.log("warn", "⚠️ [STOMP] closed");
-        this.bus.emit("close", null);
-        // 구독은 연결이 끊기면 서버쪽에서 무효화됨. 재연결 후 재구독이 필요하면
-        // 별도 레이어에서 관리(예: 아래 useStompSubscription에서 처리)
+      onWebSocketError: (evt) => {
+        this.logger.error('WebSocket error', evt);
+        onError?.(evt);
       },
     });
 
-    this.client.activate();
+    // 연결 처리 + 수동 타임아웃
+    const timer = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('STOMP connect timeout')), this.connectTimeout)
+    );
+    const activator = this.client.activate(); // activate()는 즉시 반환 (비동기 시작)
+
+    // 연결 완료 신호는 onConnect 콜백으로 오므로, 여기서는 activate() 시작 보장만
+    await Promise.race([activator, timer]).catch((e) => {
+      this.logger.error(e);
+      throw e;
+    });
   }
 
-  /** 종료 */
-  disconnect() {
+  /** 구독: destination = '/topic/...' or '/queue/...', 유저 큐는 '/user/queue/...' */
+  subscribe(
+    destination: string,
+    handler: (message: IMessage) => void,
+    headers?: Record<string, any>
+  ): StompSubscription {
+    if (!this.client || !this.client.active) {
+      throw new Error('STOMP is not connected');
+    }
+    return this.client.subscribe(destination, handler, headers);
+  }
+
+  /** 구독 해제 */
+  unsubscribe(sub: StompSubscription) {
     try {
-      this.subs.forEach((s) => s.unsubscribe());
-      this.subs.clear();
-      this.client?.deactivate();
-    } finally {
-      this.client = null;
-      this.status = "disconnected";
-      this.bus.clear();
+      sub?.unsubscribe();
+    } catch (e) {
+      this.logger.warn('unsubscribe error', e);
     }
   }
+
+  /** 메시지 전송: destination = '/app/...' (컨트롤러 @MessageMapping) */
+  send(destination: string, body?: any, headers?: Record<string, any>) {
+    if (!this.client || !this.client.active) {
+      throw new Error('STOMP is not connected');
+    }
+    const payload = typeof body === 'string' ? body : JSON.stringify(body ?? {});
+    this.client.publish({ destination, body: payload, headers });
+  }
+
+  /** 연결 해제 */
+  async disconnect() {
+    if (!this.client) return;
+    await this.client.deactivate();
+    this.client = null;
+    this.logger.info('STOMP deactivated');
+  }
 }
 
-/** 싱글톤 인스턴스 */
-export const stompService = new StompService();
+/* -------------------------------------------------------------------------- */
+/*                              Singleton Export                               */
+/* -------------------------------------------------------------------------- */
 
-/* ===========================
- * 리액트 훅 (선택)
- * =========================== */
+let _manager: StompSocketManager | null = null;
 
-/**
- * 앱 진입 시 1회 연결하고 전역 유지하고 싶다면 루트에서 호출:
- * useStompConnect({ url, token, ... })
- */
-export function useStompConnect(opts: StompOptions) {
-  const once = useRef(false);
-  useEffect(() => {
-    if (once.current) return;
-    once.current = true;
-    stompService.connect(opts);
-    return () => {
-      // 보통 앱 전체에서 유지하려면 언마운트시 disconnect 안 함
-      // 필요시 주석 해제
-      // stompService.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-}
-
-/**
- * 토픽을 구독하고, 재연결 시에도 자동 재구독해주는 훅
- * - logicalTopic: "chat/room/123", "user/queue/alerts", 또는 "/topic/raw"
- */
-export function useStompSubscription(logicalTopic: string, handler: (payload: any) => void) {
-  const topicRef = useRef(logicalTopic);
-  const handlerRef = useRef(handler);
-  handlerRef.current = handler;
-
-  useEffect(() => {
-    let unsub: (() => void) | null = null;
-
-    const trySub = () => {
-      if (stompService.getState() === "connected") {
-        unsub = stompService.subscribe(topicRef.current, (p) => handlerRef.current(p));
-      }
-    };
-
-    // 최초 시도
-    trySub();
-
-    // 연결 이벤트에 반응하여 재구독
-    const offOpen = stompService.on("open", () => {
-      // 연결이 살아나면 재구독
-      trySub();
-    });
-
-    // 안전하게 종료
-    return () => {
-      offOpen?.();
-      if (unsub) unsub();
-    };
-  }, [logicalTopic]);
-}
+export const stompManager = () => {
+  if (!_manager) _manager = new StompSocketManager();
+  return _manager;
+};

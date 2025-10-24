@@ -2,6 +2,7 @@ import WorkOnOffService, { WeeklyWorkOnOffResponse, WorkType, workTypes } from '
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
+import { formatDisplayDate, getWeekdayLabel } from '@/utils/commonUtil';
 import dayjs, { Dayjs } from 'dayjs';
 import { useRouter /*, useFocusEffect*/ } from 'expo-router';
 import React, { memo, useCallback, useEffect, useMemo, useState /*, useRef*/ } from 'react';
@@ -15,11 +16,8 @@ import {
   useColorScheme,
 } from 'react-native';
 
-/* ------------------------ utils (component 밖) ------------------------ */
-const KOREAN_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
-
+const fmtDisplayDate = (date: Dayjs) => formatDisplayDate(date, { locale: 'ko', style: 'short' });
 const fmtDateTime = (date: Dayjs, time: string) => `${date.format('YYYY-MM-DD')} ${time}`;
-const fmtDisplayDate = (date: Dayjs) => `${date.format('YYYY년 MM월 DD일')} (${KOREAN_WEEKDAYS[date.day()]})`;
 
 const getWeekRange = (date: Dayjs) => ({
   start: date.startOf('week'),
@@ -278,7 +276,7 @@ export default function WorkOnOff() {
                 <ThemedView key={d.dateStr ?? i} style={baseCard as any}>
                   <View style={styles.dayHeader}>
                     <ThemedText style={[styles.dayDate, { color: dateColor }]}>{d.date.format('MM/DD')}</ThemedText>
-                    <ThemedText style={[styles.dayName, { color: dateColor }]}>{KOREAN_WEEKDAYS[d.date.day()]}</ThemedText>
+                    <ThemedText style={[styles.dayName, { color: dateColor }]}>{getWeekdayLabel(d.date)}</ThemedText>
                     {d.isToday && (
                       <ThemedView style={[styles.todayBadge, { backgroundColor: C.success }]}>
                         <ThemedText style={[styles.todayBadgeText, { color: C.onPrimary }]}>오늘</ThemedText>
@@ -297,8 +295,8 @@ export default function WorkOnOff() {
 
                       {(d.record.isLate || d.record.isLeaveEarly) && (
                         <View style={styles.alertContainer}>
-                          {d.record.isLate && <ThemedText style={[styles.alertText, { color: C.danger }]}>⚠️ 지각</ThemedText>}
-                          {d.record.isLeaveEarly && <ThemedText style={[styles.alertText, { color: C.danger }]}>⚠️ 조퇴</ThemedText>}
+                          {d.record.isLate && <ThemedText numberOfLines={1} style={[styles.alertText, { color: C.danger }]}>⚠️ 지각</ThemedText>}
+                          {d.record.isLeaveEarly && <ThemedText numberOfLines={1} style={[styles.alertText, { color: C.danger }]}>⚠️ 조퇴</ThemedText>}
                         </View>
                       )}
                     </View>
@@ -403,7 +401,7 @@ const makeStyles = (_C: any) =>
     loadingText: { marginTop: 10, fontSize: 14 },
     recordsSection: { marginTop: 0, paddingHorizontal: 0 },
     gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-    dayRecordItem: { flexDirection: 'column', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, width: '48%', marginBottom: 8, borderRadius: 8 },
+    dayRecordItem: { flexDirection: 'column', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 8, width: '48%', marginBottom: 8, borderRadius: 8 },
     dayHeader: { flexDirection: 'row', alignItems: 'center' },
     dayDate: { fontSize: 14, fontWeight: '600' },
     dayName: { fontSize: 14, marginLeft: 8 },
@@ -412,8 +410,8 @@ const makeStyles = (_C: any) =>
     recordDetails: { flexDirection: 'column', marginTop: 2 },
     noRecord: { alignItems: 'center', paddingVertical: 12 },
     noRecordText: { fontSize: 14 },
-    alertContainer: { flexDirection: 'row', marginTop: 2, gap: 6 },
-    alertText: { fontSize: 12, fontWeight: '700' },
+    alertContainer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' },
+    alertText: { fontSize: 12, fontWeight: '700', flexShrink: 0, marginRight: 10 },
     centerRow: { paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center' },
     actionButton: {
       paddingHorizontal: 6,

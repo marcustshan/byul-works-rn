@@ -16,3 +16,8 @@ export const selectMemberList = (state: RootState) => state.member.memberList ||
 // UI 관련 셀렉터
 export const selectUILoading = (state: RootState) => state.ui.loading || false;
 export const selectUIError = (state: RootState) => state.ui.error || null;
+
+// 채팅방 관련 셀렉터
+export const selectChatRoomList = (s: RootState) => s.chatRoom.chatRoomList;
+export const selectChatRoomLoading = (s: RootState) => s.chatRoom.loading;
+export const selectChatRoomError = (s: RootState) => s.chatRoom.error;

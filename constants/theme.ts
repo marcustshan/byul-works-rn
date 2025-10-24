@@ -51,8 +51,8 @@ export const Colors = {
     surfaceToday: '#122016',
 
     // Borders
-    border: '#2A2F33',
-    borderMuted: '#23272B',
+    border: '#ccc',
+    borderMuted: '#777',
 
     // Brand & states
     tint: tintColorDark,

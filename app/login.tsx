@@ -89,7 +89,8 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.select({ ios: 'padding', android: undefined })}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <ThemedView style={styles.container}>
         {/* 상단 브랜드 영역 */}
@@ -183,6 +184,7 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontSize: 28,
+    lineHeight: 32,
     fontWeight: '700',
     color: '#662D91',
   },

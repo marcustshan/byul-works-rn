@@ -8,10 +8,10 @@ export const CURRENT_ENV: Environment = "DEVELOPMENT";
 export const API_CONFIG = {
   // 개발 환경
   DEVELOPMENT: {
-    BASE_HOST: 'http://192.168.211.71:9090',
-    BASE_URL: 'http://192.168.211.71:9090/api/works',
-    // BASE_HOST: 'http://192.168.1.66:9090',
-    // BASE_URL: 'http://192.168.1.66:9090/api/works',
+    // BASE_HOST: 'http://192.168.211.71:9090',
+    // BASE_URL: 'http://192.168.211.71:9090/api/works',
+    BASE_HOST: 'http://192.168.1.28:9090',
+    BASE_URL: 'http://192.168.1.28:9090/api/works',
   },
   
   // 프로덕션 환경
