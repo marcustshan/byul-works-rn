@@ -31,6 +31,8 @@ export default function LandingScreen() {
           if (!mounted) return;
           router.replace(autoLoginInfo ? '/main' : '/login'); // ✅ 지역 변수 token 사용 (stale 방지)
         }, 500);
+      } catch (error) {
+        router.replace('/login');
       } finally {
         // no-op
       }

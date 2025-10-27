@@ -18,6 +18,8 @@ import { store } from '@/store';
 import { ToastProvider } from '@/components/common/Toast';
 import GlobalStompBridge from '@/components/GlobalStompBridge';
 
+import '@/constants/firebaseConfig';
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];

@@ -1,25 +1,14 @@
 // src/socket/stompClient.ts
-import { CURRENT_ENV, getCurrentSocketConfig } from '@/constants/environment'; // 너의 파일 경로에 맞춰 수정
+import { CURRENT_ENV, getCurrentSocketConfig } from '@/constants/environment';
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 
-/* -------------------------------------------------------------------------- */
-/*                                   Helpers                                  */
-/* -------------------------------------------------------------------------- */
-
-function httpToWs(url: string): string {
-  // http(s) -> ws(s)
-  const wsBase = url.startsWith('https')
-    ? url.replace(/^https/i, 'wss')
-    : url.replace(/^http/i, 'ws');
-
-  // Spring SockJS endpoint면 '/websocket' 트랜스포트 경로에 직접 연결
-  // (예: https://host/socket/works/endpoint -> wss://host/socket/works/endpoint/websocket)
-  return wsBase.endsWith('/websocket') ? wsBase : `${wsBase}/websocket`;
-}
+export type Transport = 'auto' | 'sockjs' | 'raw';
 
 export type ConnectOptions = {
-  token?: string;                      // JWT 있으면 Authorization 헤더에 실어 보냄
-  extraHeaders?: Record<string, any>;  // 필요한 추가 헤더
+  token?: string;
+  extraHeaders?: Record<string, any>;
+  transport?: Transport;              // 'auto' | 'sockjs' | 'raw'
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (e: any) => void;
@@ -39,9 +28,14 @@ const defaultLogger: Required<Logger> = {
   error: (...a) => console.error('[STOMP]', ...a),
 };
 
-/* -------------------------------------------------------------------------- */
-/*                              StompSocketManager                             */
-/* -------------------------------------------------------------------------- */
+function toWsUrl(url: string): string {
+  // http(s)://.../endpoint -> ws(s)://.../endpoint/websocket
+  const wsBase = url.startsWith('https') ? url.replace(/^https/i, 'wss') : url.replace(/^http/i, 'ws');
+  return wsBase.endsWith('/websocket') ? wsBase : `${wsBase}/websocket`;
+}
+
+function isHttpLike(url: string) { return url.startsWith('http://') || url.startsWith('https://'); }
+function isWsLike(url: string) { return url.startsWith('ws://') || url.startsWith('wss://'); }
 
 export class StompSocketManager {
   private client: Client | null = null;
@@ -49,36 +43,40 @@ export class StompSocketManager {
   private readonly maxAttempts: number;
   private readonly reconnectDelay: number;
   private readonly connectTimeout: number;
-  private readonly url: string;
+  private readonly baseUrl: string;      // 환경에서 온 원본 URL (보통 http(s) SockJS endpoint)
   private logger: Required<Logger>;
   private token?: string;
 
   constructor(logger?: Logger) {
     const cfg = getCurrentSocketConfig();
-    this.url = httpToWs(cfg.URL);
+    this.baseUrl = cfg.URL; // 예: http://host/socket/works/endpoint  (SockJS 엔드포인트)
     this.maxAttempts = cfg.MAX_RECONNECT_ATTEMPTS;
     this.reconnectDelay = cfg.RECONNECT_DELAY;
     this.connectTimeout = cfg.TIMEOUT;
     this.logger = { ...defaultLogger, ...(logger ?? {}) };
   }
 
-  /** 현재 연결 여부 */
-  isConnected() {
-    return !!this.client?.connected;
-  }
+  isConnected() { return !!this.client?.connected; }
 
-  /** JWT 갱신 등 */
   setToken(token?: string) {
     this.token = token;
-    if (this.client && this.client.active) {
-      // 다음 재연결 시 반영됨. 즉시 반영 원하면 재연결 트리거 필요.
-      this.logger.info('Auth token updated (will apply on next connect)');
-    }
+    if (this.client?.active) this.logger.info('Auth token updated (will apply on next connect)');
   }
 
-  /** 연결 */
+  private buildHeaders(extra?: Record<string, any>) {
+    return {
+      ...(this.token ? { Authorization: `${this.token}` } : {}),
+      ...(extra ?? {}),
+    };
+  }
+
+  /**
+   * transport = 'auto' (기본):
+   *  - URL이 http(s)면 SockJS
+   *  - URL이 ws(s)면 Raw WS
+   */
   async connect(opts: ConnectOptions = {}): Promise<void> {
-    const { token, extraHeaders, onConnect, onDisconnect, onError } = opts;
+    const { token, extraHeaders, transport = 'auto', onConnect, onDisconnect, onError } = opts;
     if (this.isConnected()) {
       this.logger.info('Already connected');
       onConnect?.();
@@ -86,94 +84,110 @@ export class StompSocketManager {
     }
     if (token) this.token = token;
 
+    // 이전 인스턴스 정리
+    if (this.client) {
+      try { await this.client.deactivate(); } catch {}
+      this.client = null;
+    }
+
+    // 접속 방식 결정
+    let mode: Transport = transport;
+    if (mode === 'auto') {
+      if (isHttpLike(this.baseUrl)) mode = 'sockjs';
+      else if (isWsLike(this.baseUrl)) mode = 'raw';
+      else mode = 'sockjs';
+    }
+
+    const headers = this.buildHeaders(extraHeaders);
+
     this.attempt = 0;
 
-    this.client = new Client({
-      brokerURL: this.url, // RN/웹 모두 기본 WebSocket 사용
-      reconnectDelay: this.reconnectDelay, // 라이브러리 자동 재시도 간격
-      heartbeatIncoming: 15000,
-      heartbeatOutgoing: 15000,
-      // 디버그 로깅 (원하면 주석)
-      debug: (str) => {
-        if (CURRENT_ENV !== 'PRODUCTION') this.logger.debug(str);
-      },
-      // 연결 직전에 헤더 제공
-      connectHeaders: {
-        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
-        ...(extraHeaders ?? {}),
-      },
-      onConnect: () => {
-        this.logger.info('STOMP connected');
-        this.attempt = 0;
-        onConnect?.();
-      },
-      onStompError: (frame) => {
-        this.logger.error('Broker reported error:', frame.headers['message'], frame.body);
-        onError?.(frame);
-      },
-      onWebSocketClose: (evt) => {
-        this.logger.warn('WebSocket closed', evt?.code, evt?.reason);
-        onDisconnect?.();
+    if (mode === 'sockjs') {
+      // ✅ 백엔드가 withSockJS() 이므로 이 경로가 가장 안전
+      const httpUrl = this.baseUrl; // 반드시 /endpoint (NO /websocket)
+      this.logger.info('Connecting via SockJS', { httpUrl });
+      const socket = new (SockJS as any)(httpUrl);
 
-        // @stomp/stompjs 의 reconnectDelay로 자동 재시도되지만
-        // 시도 횟수를 우리가 제한하고 싶으므로 여기서 컷오프
-        this.attempt++;
-        if (this.attempt > this.maxAttempts) {
-          this.logger.error(`Max reconnect attempts exceeded (${this.maxAttempts})`);
-          // 더 이상 자동 재시도 하지 않도록 비활성화
-          this.client?.deactivate();
-        }
-      },
-      onWebSocketError: (evt) => {
-        this.logger.error('WebSocket error', evt);
-        onError?.(evt);
-      },
-    });
+      this.client = new Client({
+        // SockJS 경로에서는 brokerURL 설정하지 않고 factory만 지정
+        webSocketFactory: () => socket as any,
+        reconnectDelay: this.reconnectDelay,
+        heartbeatIncoming: 15000,
+        heartbeatOutgoing: 15000,
+        connectHeaders: headers,
+        debug: () => {},
+        onConnect: () => { this.logger.info('STOMP connected (SockJS)'); this.attempt = 0; onConnect?.(); },
+        onStompError: (frame) => { this.logger.error('Broker error:', frame.headers['message'], frame.body); onError?.(frame); },
+        onWebSocketClose: (evt) => {
+          this.logger.warn('WebSocket closed (SockJS)', evt?.code, evt?.reason);
+          onDisconnect?.();
+          this.attempt++;
+          if (this.attempt > this.maxAttempts) {
+            this.logger.error(`Max reconnect attempts exceeded (${this.maxAttempts})`);
+            this.client?.deactivate();
+          }
+        },
+        onWebSocketError: (evt) => { this.logger.error('WebSocket error (SockJS)', evt); onError?.(evt); },
+      });
+    } else {
+      // raw WebSocket + /websocket 트랜스포트로 직접
+      const wsUrl = isWsLike(this.baseUrl) ? (this.baseUrl.endsWith('/websocket') ? this.baseUrl : `${this.baseUrl}/websocket`)
+                                           : toWsUrl(this.baseUrl);
+      this.logger.info('Connecting via Raw WebSocket', { wsUrl });
 
-    // 연결 처리 + 수동 타임아웃
-    const timer = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('STOMP connect timeout')), this.connectTimeout)
-    );
-    const activator = this.client.activate(); // activate()는 즉시 반환 (비동기 시작)
+      this.client = new Client({
+        brokerURL: wsUrl,
+        // RN 환경에서 subprotocol 명시가 안전
+        webSocketFactory: () => new WebSocket(wsUrl, ['v12.stomp', 'v11.stomp', 'v10.stomp']),
+        reconnectDelay: this.reconnectDelay,
+        heartbeatIncoming: 15000,
+        heartbeatOutgoing: 15000,
+        connectHeaders: headers,
+        debug: (str) => { if (CURRENT_ENV !== 'PRODUCTION') this.logger.debug(str); },
+        onConnect: () => { this.logger.info('STOMP connected (Raw WS)'); this.attempt = 0; onConnect?.(); },
+        onStompError: (frame) => { this.logger.error('Broker error:', frame.headers['message'], frame.body); onError?.(frame); },
+        onWebSocketClose: (evt) => {
+          this.logger.warn('WebSocket closed (Raw WS)', evt?.code, evt?.reason);
+          onDisconnect?.();
+          this.attempt++;
+          if (this.attempt > this.maxAttempts) {
+            this.logger.error(`Max reconnect attempts exceeded (${this.maxAttempts})`);
+            this.client?.deactivate();
+          }
+        },
+        onWebSocketError: (evt) => { this.logger.error('WebSocket error (Raw WS)', evt); onError?.(evt); },
+      });
+    }
 
-    // 연결 완료 신호는 onConnect 콜백으로 오므로, 여기서는 activate() 시작 보장만
-    await Promise.race([activator, timer]).catch((e) => {
-      this.logger.error(e);
-      throw e;
-    });
+    // activate + 수동 타임아웃 보호
+    this.logger.info('activate() call');
+    const timer = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('STOMP connect timeout')), this.connectTimeout));
+    const activator = this.client.activate();
+    await Promise.race([activator, timer]).catch((e) => { this.logger.error(e); throw e; });
   }
 
-  /** 구독: destination = '/topic/...' or '/queue/...', 유저 큐는 '/user/queue/...' */
-  subscribe(
-    destination: string,
-    handler: (message: IMessage) => void,
-    headers?: Record<string, any>
-  ): StompSubscription {
-    if (!this.client || !this.client.active) {
-      throw new Error('STOMP is not connected');
-    }
+  subscribe(destination: string, handler: (message: IMessage) => void, headers?: Record<string, any>): StompSubscription {
+    if (!this.client || !this.client.active) throw new Error('STOMP is not connected');
     return this.client.subscribe(destination, handler, headers);
   }
 
-  /** 구독 해제 */
   unsubscribe(sub: StompSubscription) {
-    try {
-      sub?.unsubscribe();
-    } catch (e) {
-      this.logger.warn('unsubscribe error', e);
-    }
+    try { sub?.unsubscribe(); } catch (e) { this.logger.warn('unsubscribe error', e); }
   }
 
-  /** 메시지 전송: destination = '/app/...' (컨트롤러 @MessageMapping) */
+  /** 컨트롤러 @MessageMapping("/...") → publish는 "/socket/works/app/..." 로!
+   *  예: sendApp('invite/room', payload) => /socket/works/app/invite/room
+   */
+  sendApp(path: string, body?: any, headers?: Record<string, any>) {
+    this.send(`/socket/works/app/${path.replace(/^\//, '')}`, body, headers);
+  }
+
   send(destination: string, body?: any, headers?: Record<string, any>) {
-    if (!this.client || !this.client.active) {
-      throw new Error('STOMP is not connected');
-    }
+    if (!this.client || !this.client.active) throw new Error('STOMP is not connected');
     const payload = typeof body === 'string' ? body : JSON.stringify(body ?? {});
     this.client.publish({ destination, body: payload, headers });
   }
 
-  /** 연결 해제 */
   async disconnect() {
     if (!this.client) return;
     await this.client.deactivate();
@@ -182,13 +196,6 @@ export class StompSocketManager {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              Singleton Export                               */
-/* -------------------------------------------------------------------------- */
-
+/* Singleton */
 let _manager: StompSocketManager | null = null;
-
-export const stompManager = () => {
-  if (!_manager) _manager = new StompSocketManager();
-  return _manager;
-};
+export const stompManager = () => (_manager ??= new StompSocketManager());
