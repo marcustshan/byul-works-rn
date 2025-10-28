@@ -13,40 +13,27 @@ import { setExistUnread } from '@/store/notificationSlice';
 import { getAutoLoginInfo } from '@/utils/auth';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 
-import messaging from '@react-native-firebase/messaging';
+import { registerFcmTokenIfPossible } from '@/api/firebaseService';
 
 type BootstrapOptions = {
-  includeMemberInfo?: boolean; // auto-login 등에서 내정보/토큰 필요 여부
+  includeMemberInfo?: boolean;
 };
 
-/** 권한 요청 + 원격 메시지 활성화 + FCM 토큰 획득(없으면 null) */
-async function getFcmTokenSafe(): Promise<string | null> {
-  try {
-    // iOS: 알림 권한 요청 / Android: Tiramisu(API33+)에서도 필수
-    const authStatus = await messaging().requestPermission();
-    const enabled =
-      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+type TaskKey =
+  | 'members'
+  | 'menus'
+  | 'chatRooms'
+  | 'existUnread'
+  | 'autoWorkOn'
+  | 'fcmToken';
 
-    if (!enabled) {
-      console.warn('[FCM] 알림 권한 미허용으로 토큰 발급 불가');
-      return null;
-    }
-
-    // 일부 단말에서 필요: 원격 메시지 수신 준비
-    await messaging().registerDeviceForRemoteMessages();
-
-    const token = await messaging().getToken();
-    if (!token) {
-      console.warn('[FCM] getToken()이 빈 값 반환');
-      return null;
-    }
-    return token;
-  } catch (e: any) {
-    console.warn('[FCM] 토큰 획득 실패:', e?.message ?? e);
-    return null;
-  }
-}
+type Task<T = any> = {
+  key: TaskKey;
+  run: () => Promise<T>;
+  /** await: 완료까지 대기 / background: 실패해도 전체 플로우 블로킹 없이 진행 */
+  mode?: 'await' | 'background';
+  onSuccess?: (result: T) => void;
+};
 
 export const postLoginProcess = createAsyncThunk(
   'app/postLoginProcess',
@@ -55,117 +42,113 @@ export const postLoginProcess = createAsyncThunk(
     { dispatch, rejectWithValue, getState }
   ) => {
     try {
-      // 옵션에 따라 필요한 요청만 구성
-      const jobs: Array<Promise<any>> = [];
-      const keys: string[] = [];
-
+      // 1) (옵션) 자동 로그인
       if (includeMemberInfo) {
         const autoLoginInfo = await getAutoLoginInfo();
-        if (!autoLoginInfo) {
-          throw new Error('자동로그인 정보 없음');
-        }
+        if (!autoLoginInfo) throw new Error('자동로그인 정보 없음');
+
         const userInfo = await AuthService.login({
-          id: autoLoginInfo?.id,
-          password: autoLoginInfo?.password,
+          id: autoLoginInfo.id,
+          password: autoLoginInfo.password,
         });
-        if (!userInfo) {
-          throw new Error('로그인 실패');
-        }
-        // RTK dispatch는 동기지만, 일관성을 위해 await 유지해도 무해
+        if (!userInfo) throw new Error('로그인 실패');
+
         await dispatch(setToken(userInfo.accessToken));
         await dispatch(setUserInfo(userInfo));
       }
 
-      // 토큰/유저 정보
+      // 2) 현재 상태에서 유저 정보를 먼저 확보 (↔ 기존 코드의 순서 버그 수정)
       const state: any = getState();
-      const token: string | undefined = state.auth.token; // eslint-disable-line @typescript-eslint/no-unused-vars
       const user = state.auth.userInfo;
+      const memberSeq: number = user?.member?.memberSeq ?? 0;
 
-      jobs.push(MemberService.getAllMembers());
-      keys.push('members');
-
-      jobs.push(MenuService.getMyMenuList());
-      keys.push('menus');
-
-      jobs.push(ChatService.getMyChatRooms());
-      keys.push('chatRooms');
-
-      jobs.push(
-        NotificationService.checkUnreadNotifications(user?.member?.memberSeq ?? 0)
-      );
-      keys.push('existUnread');
-
-      jobs.push(WorkOnOffService.autoWorkOn());
-      keys.push('autoWorkOn');
-
-      /* --------------------------------------------------------------------
-       * Firebase FCM 토큰 등록 (개별 실패는 전체 진행에 영향 X)
-       * ------------------------------------------------------------------ */
-      jobs.push(
-        (async () => {
-          try {
-            // 로그인 사용자 식별 불가 시 스킵
-            const memberSeq: number | undefined = user?.member?.memberSeq;
-            if (!memberSeq || memberSeq <= 0) {
-              console.warn('[FCM] memberSeq 미존재로 서버 등록 스킵');
-              return null;
-            }
-
-            const fcmToken = await getFcmTokenSafe();
-            if (!fcmToken) {
-              console.warn('[FCM] 토큰 없음 → 서버 등록 스킵');
-              return null;
-            }
-
-            // 서버 등록 (API 스펙에 맞게 key/shape 조정)
-            await AuthService.setFirebaseToken(fcmToken);
-
-            return { memberSeq, fcmToken };
-          } catch (e: any) {
-            console.error('[postLoginProcess] FCM 등록 실패:', e?.message ?? e);
-            return null;
-          }
-        })()
-      );
-      keys.push('fcmRegister');
-
-      // 개별 실행으로 오류 추적
-      const results: any[] = [];
-
-      for (let i = 0; i < jobs.length; i++) {
-        const key = keys[i];
-        const job = jobs[i];
-
-        try {
-          const result = await job;
-          results.push(result);
-
-          // 결과 매핑 & 상태 반영
-          if (key === 'members') {
+      // 3) Task 목록 (키+잡+성공처리+모드)
+      const tasks: Task[] = [
+        {
+          key: 'members',
+          run: () => MemberService.getAllMembers(),
+          mode: 'await',
+          onSuccess: (result: any) => {
             dispatch(setMemberList(result));
-          } else if (key === 'menus') {
+          },
+        },
+        {
+          key: 'menus',
+          run: () => MenuService.getMyMenuList(),
+          mode: 'await',
+          onSuccess: (result: any) => {
             dispatch(setMenuList(result));
-          } else if (key === 'chatRooms') {
+          },
+        },
+        {
+          key: 'chatRooms',
+          run: () => ChatService.getMyChatRooms(),
+          mode: 'await',
+          onSuccess: (result: any[]) => {
             dispatch(setChatRoomList(result));
             let newMessageCount = 0;
             for (const chatRoom of result ?? []) {
               newMessageCount += chatRoom?.newCnt ?? 0;
             }
             dispatch(setNewMessageCount(newMessageCount));
-          } else if (key === 'existUnread') {
+          },
+        },
+        {
+          key: 'existUnread',
+          run: () => NotificationService.checkUnreadNotifications(memberSeq),
+          mode: 'await',
+          onSuccess: (result: boolean) => {
             dispatch(setExistUnread(result));
-          } else if (key === 'fcmRegister') {
-            // 상태 반영할 항목은 없지만, 필요 시 저장 로직 추가 가능
-            // e.g., dispatch(setFcmToken(result?.fcmToken))
-          }
-        } catch (error: any) {
-          console.error(`[postLoginProcess] ${key} API 호출 실패:`, error?.message ?? error);
-          // 개별 API 실패는 전체 프로세스를 중단시키지 않음
-          results.push(null);
-        }
-      }
+          },
+        },
+        {
+          key: 'autoWorkOn',
+          run: () => WorkOnOffService.autoWorkOn(),
+          mode: 'await',
+        },
+        {
+          // FCM은 전체 UX를 막을 필요가 없으므로 background 권장
+          key: 'fcmToken',
+          run: () =>
+            registerFcmTokenIfPossible(memberSeq, async (token: string) => {
+              await AuthService.setFirebaseToken(token);
+              return token;
+            }),
+          mode: 'background',
+          onSuccess: (token?: string | null) => {
+            if (token) console.log('[FCM] 토큰 등록 성공:', token);
+            else console.warn('[FCM] 토큰 미등록 또는 스킵');
+          },
+        },
+      ];
 
-      return { loaded: keys };
+      // 4) 대기 대상과 백그라운드 대상을 분리
+      const awaitTasks = tasks.filter((t) => (t.mode ?? 'await') === 'await');
+      const bgTasks = tasks.filter((t) => (t.mode ?? 'await') === 'background');
+
+      // 5) awaitTasks는 병렬 수행 + allSettled로 개별 실패 격리
+      const settled = await Promise.allSettled(awaitTasks.map((t) => t.run()));
+      settled.forEach((res, idx) => {
+        const key = awaitTasks[idx].key;
+        if (res.status === 'rejected') {
+          console.error(`[postLoginProcess] ${key} 실패:`, res.reason);
+          return;
+        }
+        awaitTasks[idx].onSuccess?.(res.value);
+      });
+
+      // 6) bgTasks는 fire-and-forget로 수행하되 로깅만
+      bgTasks.forEach(async (t) => {
+        try {
+          const result = await t.run();
+          t.onSuccess?.(result);
+        } catch (e: any) {
+          console.error(`[postLoginProcess] ${t.key} 실패(백그라운드):`, e?.message ?? e);
+        }
+      });
+
+      // 7) 로드된 키 목록 반환
+      return { loaded: [...awaitTasks.map((t) => t.key), ...bgTasks.map((t) => t.key)] };
     } catch (error: any) {
       console.error('[postLoginProcess] 초기화 실패:', error?.message ?? error);
       return rejectWithValue(error?.message ?? '로그인 후처리 실패');

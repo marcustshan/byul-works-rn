@@ -302,7 +302,10 @@ const ChatListItem = React.memo(function ChatListItem({
             resizeMode="cover"
           />
         ) : (
-          <ThemedText style={[styles.roomIconText, { color: roomIconTextColor }]}>{initials}</ThemedText>
+          isGroup ? <Ionicons name="people" size={24} color={roomIconTextColor} />
+            : (
+              <ThemedText style={[styles.roomIconText, { color: roomIconTextColor }]}>{initials}</ThemedText>
+            )
         )}
         {isGroup && (
           <View style={[styles.groupBadge, { backgroundColor: colors.primary, borderColor: colors.surface }]}>

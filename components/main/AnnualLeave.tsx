@@ -33,6 +33,10 @@ export default function AnnualLeaveComponent() {
       const memberSeq = member.memberSeq;
       const year = Math.ceil(member.monthsPeriod / 12);
       const annualLeaveHistory = await WorkOnOffService.getAnnualLeave(memberSeq, year);
+      if (annualLeaveHistory.personalScheduleList && annualLeaveHistory.personalScheduleList.length > 0) {
+        annualLeaveHistory.personalScheduleList.reverse();
+      }
+
       setAnnualLeaveHistory(annualLeaveHistory);
     } catch (err: any) {
       setError(err.message || '연차 기록을 불러오는데 실패했습니다.');

@@ -3,7 +3,7 @@ import { DarkTheme as RNDarkTheme, DefaultTheme as RNLightTheme, ThemeProvider }
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
-import { Alert, BackHandler, StyleSheet } from 'react-native';
+import { Alert, BackHandler, PermissionsAndroid, Platform, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +18,10 @@ import { store } from '@/store';
 import { ToastProvider } from '@/components/common/Toast';
 import GlobalStompBridge from '@/components/GlobalStompBridge';
 
-import '@/constants/firebaseConfig';
+import { getFcmTokenSafely } from '@/api/firebaseService';
+import { ensureFirebaseApp } from '@/config/firebaseConfig';
+
+ensureFirebaseApp();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -62,6 +65,28 @@ export default function RootLayout() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [currentPath, router]);
+
+  // 🔔 알림 권한/토큰 부트스트랩
+  useEffect(() => {
+    (async () => {
+      // Android 13+ 런타임 권한
+      if (Platform.OS === 'android' && Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request('android.permission.POST_NOTIFICATIONS');
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.warn('[Notifications] Android POST_NOTIFICATIONS not granted');
+          return;
+        }
+      }
+
+      // iOS/Android 공통: FCM 권한 + 토큰(내부에서 requestPermission 호출)
+      const token = await getFcmTokenSafely();
+      if (token) {
+        console.log('[Notifications] FCM token:', token);
+      } else {
+        console.warn('[Notifications] FCM token unavailable');
+      }
+    })();
+  }, []);
 
   return (
     <GestureHandlerRootView style={styles.flex1}>

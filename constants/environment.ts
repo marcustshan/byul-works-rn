@@ -61,7 +61,7 @@ export const SOCKET_CONFIG = {
 export const FIREBASE_CONFIG = {
   // Firebase 기능 활성화 여부 (한 곳에서 관리)
   // ENABLED: true, // false로 설정하면 모든 Firebase 기능 비활성화
-  ENABLED: false, // false로 설정하면 모든 Firebase 기능 비활성화
+  ENABLED: true, // false로 설정하면 모든 Firebase 기능 비활성화
   
   // 환경별 Firebase 설정
   DEVELOPMENT: {
