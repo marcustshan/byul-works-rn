@@ -1,11 +1,23 @@
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { selectTotalUnread } from '@/selectors/chat/chatSelectors';
 import { useAppSelector } from '@/store/hooks';
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from '../themed-text';
+
+type RouteMatcher = string | RegExp;
+
+type MenuItem = {
+  id: 'main' | 'chat' | 'schedule' | 'more';
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  activeIcon: keyof typeof Ionicons.glyphMap;
+  route: string;              // 기본 이동 경로 (push용)
+  matchers?: RouteMatcher[];  // 활성 판단용 경로/패턴들
+};
 
 export default function Footer() {
   const router = useRouter();
@@ -13,23 +25,62 @@ export default function Footer() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
-  const menuItems = [
-    { id: 'main', label: '메인화면', icon: 'home-outline' as keyof typeof Ionicons.glyphMap, activeIcon: 'home' as keyof typeof Ionicons.glyphMap, route: '/main' },
-    { id: 'chat', label: '채팅', icon: 'chatbubble-outline' as keyof typeof Ionicons.glyphMap, activeIcon: 'chatbubble' as keyof typeof Ionicons.glyphMap, route: '/chat/chat-room-list' },
-    { id: 'schedule', label: '일정', icon: 'calendar-outline' as keyof typeof Ionicons.glyphMap, activeIcon: 'calendar' as keyof typeof Ionicons.glyphMap, route: '/schedule' },
-    { id: 'more', label: '더보기', icon: 'ellipsis-horizontal-outline' as keyof typeof Ionicons.glyphMap, activeIcon: 'ellipsis-horizontal' as keyof typeof Ionicons.glyphMap, route: '/more' },
+  const menuItems: MenuItem[] = [
+    {
+      id: 'main',
+      label: '메인화면',
+      icon: 'home-outline',
+      activeIcon: 'home',
+      route: '/main',
+      // '/' 또는 '/main' 및 그 하위 경로 모두 활성
+      matchers: ['/main', /^\/main(\/|$)/],
+    },
+    {
+      id: 'chat',
+      label: '채팅',
+      icon: 'chatbubble-outline',
+      activeIcon: 'chatbubble',
+      route: '/chat/chat-room-list',
+      // /chat 전체 섹션 활성 (예: /chat, /chat/room/123 등)
+      matchers: ['/chat', /^\/chat(\/|$)/],
+    },
+    {
+      id: 'schedule',
+      label: '일정',
+      icon: 'calendar-outline',
+      activeIcon: 'calendar',
+      route: '/schedule',
+      matchers: ['/schedule', /^\/schedule(\/|$)/],
+    },
+    {
+      id: 'more',
+      label: '더보기',
+      icon: 'ellipsis-horizontal-outline',
+      activeIcon: 'ellipsis-horizontal',
+      route: '/more',
+      matchers: ['/more', /^\/more(\/|$)/],
+    },
   ];
 
   const handleMenuPress = (route: string) => router.push(route);
 
-  const isActiveRoute = (route: string) => {
-    if (route === '/main') {
-      return pathname === '/' || pathname === '/main';
+  const matchPath = (path: string, matcher: RouteMatcher) => {
+    if (typeof matcher === 'string') {
+      // 완전일치 혹은 하위 경로(prefix + '/')
+      return path === matcher || path.startsWith(matcher.endsWith('/') ? matcher : matcher + '/');
     }
-    return pathname.startsWith(route);
+    return matcher.test(path);
   };
 
-  const newMessageCount = useAppSelector((s) => s.chatRoom.newMessageCount ?? 0);
+  const isActiveRoute = (item: MenuItem) => {
+    if (item.matchers?.length) {
+      return item.matchers.some((m) => matchPath(pathname, m));
+    }
+    // matchers가 없으면 route prefix로 판단
+    return matchPath(pathname, item.route);
+  };
+
+  const newMessageCount = useAppSelector(selectTotalUnread);
 
   const dynamicStyles = createStyles(colors, colorScheme);
 
@@ -39,24 +90,24 @@ export default function Footer() {
     <ThemedView style={dynamicStyles.footerContainer}>
       <View style={dynamicStyles.menuContainer}>
         {menuItems.map((item) => {
-          const isActive = isActiveRoute(item.route);
+          const active = isActiveRoute(item);
           const showBadge = item.id === 'chat' && newMessageCount > 0;
 
           return (
             <TouchableOpacity
               key={item.id}
-              style={[dynamicStyles.menuItem, isActive && dynamicStyles.activeMenuItem]}
+              style={[dynamicStyles.menuItem, active && dynamicStyles.activeMenuItem]}
               onPress={() => handleMenuPress(item.route)}
               activeOpacity={0.7}
               hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel={`${item.label}${showBadge ? `, 새 메시지 ${newMessageCount}개` : ''}`}
+              accessibilityLabel={`${item.label}${showBadge ? `, 새 메시지 ${formatCount(newMessageCount)}개` : ''}`}
             >
               <View style={dynamicStyles.iconWrapper}>
                 <Ionicons
-                  name={isActive ? item.activeIcon : item.icon}
+                  name={active ? item.activeIcon : item.icon}
                   size={30}
-                  color={isActive ? colors.tabIconSelected : colors.tabIconDefault}
+                  color={active ? colors.tabIconSelected : colors.tabIconDefault}
                   style={dynamicStyles.menuIcon}
                 />
                 {showBadge && (
@@ -69,8 +120,8 @@ export default function Footer() {
                   </View>
                 )}
               </View>
-              {/* 라벨이 필요하면 아래 주석 해제
-              <ThemedText style={[dynamicStyles.menuLabel, isActive && dynamicStyles.activeMenuLabel]}>
+              {/* 라벨 필요 시 사용
+              <ThemedText style={[dynamicStyles.menuLabel, active && dynamicStyles.activeMenuLabel]}>
                 {item.label}
               </ThemedText>
               */}
@@ -128,12 +179,11 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
       color: colors.tabIconSelected,
       fontWeight: '600',
     },
-    // ---- Badge styles (light/dark 대응) ----
+    // ---- Badge styles ----
     badgeOuter: {
       position: 'absolute',
       top: -4,
       right: -2,
-      // 바탕색과 동일한 아웃라인을 넣어 배지를 또렷하게 (다크/라이트 공통)
       backgroundColor: colors.background,
       borderRadius: 10,
       padding: 1.5,
@@ -143,7 +193,6 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
       paddingHorizontal: 4,
       height: 18,
       borderRadius: 9,
-      // 다크에서 조금 더 선명한 레드, 라이트에선 살짝 낮춘 레드톤
       backgroundColor: colorScheme === 'dark' ? '#ff4d4f' : '#e02424',
       alignItems: 'center',
       justifyContent: 'center',

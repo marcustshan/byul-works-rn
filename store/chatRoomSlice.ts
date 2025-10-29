@@ -1,3 +1,4 @@
+// store/chatRoomSlice.ts
 import { ChatRoom } from '@/api/chat/chatService';
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
@@ -5,14 +6,13 @@ export interface ChatRoomState {
   chatRoomList: ChatRoom[] | null;
   loading: boolean;
   error: string | null;
-  newMessageCount: number;
+  // ❌ newMessageCount 삭제
 }
 
 const initialState: ChatRoomState = {
   chatRoomList: null,
   loading: false,
   error: null,
-  newMessageCount: 0,
 };
 
 const chatRoomSlice = createSlice({
@@ -29,6 +29,10 @@ const chatRoomSlice = createSlice({
       state.loading = false;
       state.error = null;
     },
+    clearChatRoomUnread(state, action: PayloadAction<number>) {
+      const room = state.chatRoomList?.find(r => r.chatRoomSeq === action.payload);
+      if (room) room.newCnt = 0; // ✅ 전역 카운트 조작 없음
+    },
     setChatRoomLoading(state, action: PayloadAction<boolean>) {
       state.loading = action.payload;
     },
@@ -36,19 +40,6 @@ const chatRoomSlice = createSlice({
       state.error = action.payload;
       state.loading = false;
     },
-    setNewMessageCount(state, action: PayloadAction<number>) {
-      state.newMessageCount = action.payload;
-    },
-    setNewMessageCountPlus(state, action: PayloadAction<number>) {
-      state.newMessageCount = state.newMessageCount + action.payload;
-    },
-    setNewMessageCountMinus(state, action: PayloadAction<number>) {
-      state.newMessageCount = state.newMessageCount - action.payload;
-    },
-    setNewMessageCountZero(state) {
-      state.newMessageCount = 0;
-    },
-    /* ✅ 개별 채팅방 갱신용 액션 추가 */
     updateChatRoom(
       state,
       action: PayloadAction<{
@@ -59,18 +50,13 @@ const chatRoomSlice = createSlice({
         incUnread?: boolean;
       }>
     ) {
-      const { chatRoomSeq, content, createDate, memberSeq, incUnread = true } =
-        action.payload;
-      const room = state.chatRoomList?.find(
-        (r) => r.chatRoomSeq === chatRoomSeq
-      );
+      const { chatRoomSeq, content, createDate, memberSeq, incUnread = true } = action.payload;
+      const room = state.chatRoomList?.find(r => r.chatRoomSeq === chatRoomSeq);
       if (!room) return;
-      // 프리뷰 / 보낸 시간 / 마지막 보낸 멤버 갱신
       if (content !== undefined) room.lastInsertMsg = content;
       if (createDate !== undefined) room.lastInsertDate = createDate;
       if (memberSeq !== undefined) room.lastMsgMemberSeq = memberSeq;
-      // newCnt 증가
-      if (incUnread) room.newCnt = (room.newCnt ?? 0) + 1;
+      if (incUnread) room.newCnt = (room.newCnt ?? 0) + 1; // ✅ 방별만 조작
     },
   },
 });
@@ -80,10 +66,8 @@ export const {
   clearChatRoomList,
   setChatRoomLoading,
   setChatRoomError,
-  setNewMessageCount,
-  setNewMessageCountPlus,
-  setNewMessageCountMinus,
-  setNewMessageCountZero,
   updateChatRoom,
+  clearChatRoomUnread,
 } = chatRoomSlice.actions;
+
 export default chatRoomSlice.reducer;

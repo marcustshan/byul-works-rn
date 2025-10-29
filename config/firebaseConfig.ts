@@ -33,8 +33,6 @@ export function ensureFirebaseApp() {
     databaseURL: '',
   };
 
-  console.log("----------------------------- config",config);
-
   const app = initializeApp(config);
   console.log('[firebaseApp] Firebase initialized ✅', app);
   return app;

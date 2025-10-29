@@ -66,6 +66,16 @@ export interface ChatPageResult {
   maxChatSeq: number;
 }
 
+// 채팅 메시지 전송용 타입
+export interface ChatSendType {
+  content: string;
+  memberName: string;
+  chatRoomName: string;
+  chatRoomSeq: number;
+  chatType: 'M' | 'I' | 'F' | 'L'; // M: 메시지, I: 이미지, F: 파일, L: 링크
+  parentChat?: ChatMessage | null; // 답장인 경우 부모 메시지 전체 객체
+}
+
 // 채팅 메시지 페이지 요청 타입
 export interface ChatPageRequest {
   size?: number;

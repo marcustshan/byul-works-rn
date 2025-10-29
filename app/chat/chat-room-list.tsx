@@ -30,8 +30,11 @@ import { encodeBase64 } from '@/utils/commonUtil';
 // ✅ Redux
 import { MemberService } from '@/api/memberService';
 import { selectChatRoomError, selectChatRoomList, selectChatRoomLoading, selectUserInfo } from '@/hooks/selectors';
+import { clearChatRoomUnread } from '@/store/chatRoomSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadChatRooms } from '@/store/thunk/chatRoomThunk';
+
+import { useRouter } from 'expo-router';
 
 /* -------------------------------------------------------------------------- */
 /*                               Helper Functions                              */
@@ -64,6 +67,20 @@ export default function ChatRoomListScreen() {
   const error = useAppSelector(selectChatRoomError);
 
   const searchRef = useRef<TextInput>(null);
+
+  const router = useRouter();
+
+  // 채팅방 선택
+  const openRoom = useCallback((room: ChatRoom) => {
+    dispatch(clearChatRoomUnread(room.chatRoomSeq));
+    router.push({
+      pathname: '/chat/[chatRoomSeq]',
+      params: {
+        chatRoomSeq: room.chatRoomSeq.toString(),
+        name: room.chatRoomName,
+      },
+    });
+  }, [dispatch, router]);
 
   // 최초 로드
   useEffect(() => {
@@ -102,7 +119,7 @@ export default function ChatRoomListScreen() {
 
   const renderItem: ListRenderItem<ChatRoom> = useCallback(({ item }) => (
     // 🔻 카드 대신 Pressable로 “플랫한” 아이템
-    <ChatListItem room={item} colors={colors} />
+    <ChatListItem room={item} colors={colors} onPress={() => openRoom(item)} />
   ), [colors]);
 
   const keyExtractor = useCallback((item: ChatRoom) => String(item.chatRoomSeq), []);
@@ -178,7 +195,7 @@ export default function ChatRoomListScreen() {
           ListEmptyComponent={
             error
               ? <ErrorState message={error} onRetry={() => dispatch(loadChatRooms())} colors={colors} />
-              : <EmptyState query={query} colors={colors} />
+              : <EmptyState tab={tab} query={query} colors={colors} />
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -247,8 +264,8 @@ const FilterTabs = React.memo(function FilterTabs({
 /* -------------------------------------------------------------------------- */
 
 const ChatListItem = React.memo(function ChatListItem({
-  room, colors
-}: { room: ChatRoom; colors: AppColors }) {
+  room, colors, onPress
+}: { room: ChatRoom; colors: AppColors; onPress: () => void }) {
   const isGroup = (room.joinCnt ?? 0) >= 3;
   const unreadCount = room.newCnt ?? 0;
   const lastMessage = room.lastInsertMsg ?? '';
@@ -281,7 +298,7 @@ const ChatListItem = React.memo(function ChatListItem({
 
   return (
     <Pressable
-      onPress={() => { /* router.push(`/chat/${room.chatRoomSeq}`) */ }}
+      onPress={onPress}
       android_ripple={{ color: colors.borderMuted || colors.border }}
       style={({ pressed }) => [
         styles.itemRow,
@@ -342,12 +359,12 @@ const ChatListItem = React.memo(function ChatListItem({
 /*                                  Empty/Error                                */
 /* -------------------------------------------------------------------------- */
 
-const EmptyState = React.memo(function EmptyState({ query, colors }: { query: string; colors: AppColors }) {
+const EmptyState = React.memo(function EmptyState({ query, tab, colors }: { query: string; tab: 'all' | 'unread'; colors: AppColors }) {
   return (
     <ThemedView style={styles.emptyWrap}>
       <Ionicons name="chatbubble-ellipses-outline" size={48} color={colors.textMuted} />
       <ThemedText style={{ marginTop: 12, color: colors.textDim, fontSize: 16 }}>
-        {query ? '검색 결과가 없어요.' : '아직 대화가 없어요. 새 채팅을 시작해보세요!'}
+        {query ? '검색 결과가 없어요.' : tab === 'unread' ? '안읽은 대화가 없어요.' : '아직 대화가 없어요. 새 채팅을 시작해보세요!'}
       </ThemedText>
     </ThemedView>
   );
@@ -566,3 +583,5 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
+
+

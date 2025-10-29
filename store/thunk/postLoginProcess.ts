@@ -6,7 +6,7 @@ import { MenuService } from '@/api/menuService';
 import { NotificationService } from '@/api/notificationService';
 import WorkOnOffService from '@/api/workOnOff/workOnOffService';
 import { setToken, setUserInfo } from '@/store/authSlice';
-import { setChatRoomList, setNewMessageCount } from '@/store/chatRoomSlice';
+import { setChatRoomList } from '@/store/chatRoomSlice';
 import { setMemberList } from '@/store/memberSlice';
 import { setMenuList } from '@/store/menuSlice';
 import { setExistUnread } from '@/store/notificationSlice';
@@ -90,7 +90,6 @@ export const postLoginProcess = createAsyncThunk(
             for (const chatRoom of result ?? []) {
               newMessageCount += chatRoom?.newCnt ?? 0;
             }
-            dispatch(setNewMessageCount(newMessageCount));
           },
         },
         {

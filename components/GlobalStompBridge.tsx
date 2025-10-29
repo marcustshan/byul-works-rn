@@ -3,7 +3,7 @@ import { ChatMessage, ChatRoom } from '@/api/chat/chatService';
 import { MemberService } from '@/api/memberService';
 import { useStompConnect } from '@/hooks/useStomp';
 import { stompManager } from '@/socket/stompClient';
-import { setNewMessageCountPlus, updateChatRoom } from '@/store/chatRoomSlice';
+import { updateChatRoom } from '@/store/chatRoomSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
@@ -89,7 +89,6 @@ export default function GlobalStompBridge() {
               incUnread: true,
             }));
           } catch {}
-          dispatch(setNewMessageCountPlus(1));
         })
       );
     });

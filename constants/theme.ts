@@ -14,7 +14,7 @@ export const Colors = {
     // Surfaces
     background: '#FFFFFF',      // 화면 배경
     surface: '#FFFFFF',         // 카드/모달 배경
-    surfaceMuted: '#F7F8FA',    // 약한 면(주말/보조 카드)
+    surfaceMuted: '#F1F1F1',    // 약한 면(주말/보조 카드)
     surfaceToday: '#E8F5E8',    // 오늘 하이라이트 카드
 
     // Borders
@@ -47,7 +47,7 @@ export const Colors = {
     // Surfaces
     background: '#151718',
     surface: '#1C1F21',
-    surfaceMuted: '#171A1C',
+    surfaceMuted: '#272A2C',
     surfaceToday: '#122016',
 
     // Borders
