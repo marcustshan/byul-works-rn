@@ -6,13 +6,14 @@ export interface ChatRoomState {
   chatRoomList: ChatRoom[] | null;
   loading: boolean;
   error: string | null;
-  // ❌ newMessageCount 삭제
+  activeChatRoomSeq: number | null;
 }
 
 const initialState: ChatRoomState = {
   chatRoomList: null,
   loading: false,
   error: null,
+  activeChatRoomSeq: null,
 };
 
 const chatRoomSlice = createSlice({
@@ -39,6 +40,12 @@ const chatRoomSlice = createSlice({
     setChatRoomError(state, action: PayloadAction<string | null>) {
       state.error = action.payload;
       state.loading = false;
+    },
+    setActiveChatRoomSeq(state, action: PayloadAction<number | null>) {
+      state.activeChatRoomSeq = action.payload;
+    },
+    clearActiveChatRoomSeq(state) {
+      state.activeChatRoomSeq = null;
     },
     updateChatRoom(
       state,
@@ -68,6 +75,8 @@ export const {
   setChatRoomError,
   updateChatRoom,
   clearChatRoomUnread,
+  setActiveChatRoomSeq,
+  clearActiveChatRoomSeq,
 } = chatRoomSlice.actions;
 
 export default chatRoomSlice.reducer;

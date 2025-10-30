@@ -1,6 +1,7 @@
 // screens/ChatRoomScreen.tsx
+import { useAppDispatch } from '@/store/hooks';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,14 +23,18 @@ import ChatRoomHeader from '@/components/chat/ChatRoomHeader';
 import { Colors } from '@/constants/theme';
 import { selectUserInfo } from '@/hooks/selectors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { selectChatRoomBySeq } from '@/selectors/chat/chatSelectors';
 import type { UserInfo } from '@/store/authSlice';
+import { clearActiveChatRoomSeq, setActiveChatRoomSeq } from '@/store/chatRoomSlice';
 import { useAppSelector } from '@/store/hooks';
 
 export default function ChatRoomScreen() {
+  const dispatch = useAppDispatch();
   const router = useRouter();
   const params = useLocalSearchParams<{ chatRoomSeq: string; name?: string }>();
   const chatRoomSeq = Number(params.chatRoomSeq);
   const roomTitle = params.name ?? '채팅';
+  const chatRoom = useAppSelector(selectChatRoomBySeq(chatRoomSeq)) ?? null;
 
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
@@ -50,9 +55,6 @@ export default function ChatRoomScreen() {
   const [minChatSeq, setMinChatSeq] = useState<number | null>(null);
   const [maxChatSeq, setMaxChatSeq] = useState<number | null>(null);
 
-  // 스크롤 bottom 여부 확인
-  const [needScrollToBottom, setNeedScrollToBottom] = useState(true);
-
   // FAB 표시/위치
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [inputBarH, setInputBarH] = useState(56); // 입력바 높이(멀티라인 대응)
@@ -60,9 +62,26 @@ export default function ChatRoomScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
 
+  useFocusEffect(
+    useCallback(() => {
+      // ✅ 화면에 진입했을 때 실행
+      const seq = Number(chatRoomSeq);
+      if (!Number.isNaN(seq)) {
+        console.log(`[ChatRoomScreen] 진입 → setActiveChatRoom(${seq})`);
+        dispatch(setActiveChatRoomSeq(seq));
+      }
+
+      // ✅ 화면에서 벗어날 때 실행 (다른 페이지로 이동)
+      return () => {
+        console.log('[ChatRoomScreen] 이탈 → clearActiveChatRoom()');
+        dispatch(clearActiveChatRoomSeq());
+      };
+    }, [dispatch, chatRoomSeq])
+  );
+
   // --- 유틸: 정렬(오래된 -> 최신) ---
   const sortMessages = useCallback((rows: ChatMessage[]) => {
-    return [...rows].sort((a, b) => a.chatSeq - b.chatSeq);
+    return [...rows].sort((a, b) => b.chatSeq - a.chatSeq);
   }, []);
 
   /* ----------------------------- 초기 로딩 ----------------------------- */
@@ -72,7 +91,7 @@ export default function ChatRoomScreen() {
     try {
       await ChatService.joinRoom(chatRoomSeq).catch(() => {});
       const page = await ChatService.getRoomMessages(chatRoomSeq, { size: 30 });
-      setMessages(page.content ?? []);
+      setMessages(sortMessages(page.content) ?? []);
 
       // ✅ 페이징 상태 업데이트
       setHasMoreMessages(!!page?.hasPrev);
@@ -80,7 +99,6 @@ export default function ChatRoomScreen() {
       setMaxChatSeq(page?.maxChatSeq ?? null);
     } finally {
       setLoading(false);
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
     }
   }, [chatRoomSeq]);
 
@@ -91,9 +109,7 @@ export default function ChatRoomScreen() {
   // ✅ 최상단에서 더 불러오기 (스크롤 이동/복원 없음)
   const loadOlder = useCallback(async () => {
     if (!chatRoomSeq || !hasMoreMessages || isLoadingMore || !minChatSeq) return;
-
     setIsLoadingMore(true);
-    setNeedScrollToBottom(false);
     try {
       const pageRequest: ChatPageRequest = {
         size: 20,
@@ -105,26 +121,22 @@ export default function ChatRoomScreen() {
         maxChatSeq: maxChatSeq || undefined,
         includeBase: false,
       };
-
+  
       const result = await ChatService.getRoomMessages(chatRoomSeq, pageRequest);
-
       if (result.content?.length) {
-        setMessages(prev => {
-          const exists = new Set(prev.map(m => m.chatSeq));
-          const newOnes = result.content.filter(m => !exists.has(m.chatSeq));
+        setMessages((prev) => {
+          const exists = new Set(prev.map((m) => m.chatSeq));
+          const newOnes = result.content.filter((m) => !exists.has(m.chatSeq));
           if (newOnes.length === 0) return prev;
-          return sortMessages([...newOnes, ...prev]); // ✅ 앞에 prepend
+          // ✅ inverted에서는 뒤에 붙이는 게 "위쪽"에 붙는 효과
+          return [...prev, ...sortMessages(newOnes)];
         });
-
-        // ✅ 페이징 상태 갱신
         setHasMoreMessages(!!result.hasPrev);
         setMinChatSeq(result.minChatSeq ?? minChatSeq);
         setMaxChatSeq(result.maxChatSeq ?? maxChatSeq);
       } else {
         setHasMoreMessages(false);
       }
-    } catch (e) {
-      console.error('❌ 추가 메시지 로드 실패:', e);
     } finally {
       setIsLoadingMore(false);
     }
@@ -133,7 +145,7 @@ export default function ChatRoomScreen() {
   /* ----------------------------- 메시지 렌더 ----------------------------- */
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
-      <ChatBubble message={item} isMine={item.memberSeq === memberSeq} />
+      <ChatBubble chatRoom={chatRoom} message={item} isMine={item.memberSeq === memberSeq} />
     ),
     [memberSeq]
   );
@@ -199,16 +211,7 @@ export default function ChatRoomScreen() {
   }
 
   // 상/하단 임계값
-  const TOP_THRESHOLD = 24;
   const BOTTOM_SHOW_THRESHOLD = 50; // 하단에서 이 정도 이상 떨어져 있으면 FAB 노출
-  const onContentSizeChange = useCallback(() => {
-    if (needScrollToBottom) {
-      console.log('onContentSizeChange');
-      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
-    } else {
-      setNeedScrollToBottom(true);
-    }
-  }, [needScrollToBottom, setNeedScrollToBottom]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -245,18 +248,14 @@ export default function ChatRoomScreen() {
               contentContainerStyle={styles.listContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              onContentSizeChange={onContentSizeChange}
+              inverted={true}
+              onEndReached={loadOlder}
+              onEndReachedThreshold={0.5}
               // ✅ 스크롤 감지: 상단 로드 + 하단 FAB 노출
               onScroll={(e) => {
                 const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
                 const y = contentOffset.y;
-
-                // 상단 가까우면 이전 메시지 로드
-                if (y <= TOP_THRESHOLD) loadOlder();
-
-                // 하단과의 거리 계산
-                const distanceFromBottom = contentSize.height - (layoutMeasurement.height + y);
-                setShowScrollToBottom(distanceFromBottom > BOTTOM_SHOW_THRESHOLD);
+                setShowScrollToBottom(y > BOTTOM_SHOW_THRESHOLD);
               }}
               scrollEventThrottle={16}
               // ✅ 최상단 로딩 스피너 표시 (비-inverted에서 상단 헤더 자리에 보임)
@@ -274,7 +273,7 @@ export default function ChatRoomScreen() {
         {/* 🔽 스크롤-투-바텀 FAB: 입력바 바로 위에 뜨도록 inputBarH를 반영 */}
         {showScrollToBottom && (
           <TouchableOpacity
-            onPress={() => listRef.current?.scrollToEnd({ animated: true })}
+            onPress={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
             style={[
               styles.scrollFab,
               {

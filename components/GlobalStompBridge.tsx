@@ -22,6 +22,8 @@ export default function GlobalStompBridge() {
   // 연결 상태 플래그 (연결 이벤트에 반응해서 구독 effect 재실행)
   const [connected, setConnected] = useState(false);
 
+  const activeChatRoomSeq = useAppSelector((s) => s.chatRoom.activeChatRoomSeq);
+
   // 1) 루트에서 연결만 책임 (전역 훅은 간단하게)
   useStompConnect({
     token: token,
@@ -88,7 +90,9 @@ export default function GlobalStompBridge() {
               memberSeq: body.memberSeq,
               incUnread: true,
             }));
-          } catch {}
+          } catch (error) {
+            console.error('error', error);
+          }
         })
       );
     });
