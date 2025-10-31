@@ -1,8 +1,8 @@
 // 환경 설정을 중앙에서 관리하는 파일
 export type Environment = 'DEVELOPMENT' | 'PRODUCTION' | 'TEST';
 
-export const CURRENT_ENV: Environment = "PRODUCTION";
-// export const CURRENT_ENV: Environment = "DEVELOPMENT";
+// export const CURRENT_ENV: Environment = "PRODUCTION";
+export const CURRENT_ENV: Environment = "DEVELOPMENT";
 
 // 환경별 API 설정
 export const API_CONFIG = {

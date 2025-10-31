@@ -4,12 +4,31 @@ import { Platform } from 'react-native';
 const tintColorLight = '#662D91';
 const tintColorDark = '#ffffff';
 
+/*
+const palette = (dark: boolean) => ({
+  bgMine: dark ? '#4a4f5a' : '#e9e7ff',
+  bgOther: dark ? '#373c43' : '#ffffff',
+  text: dark ? '#e6eef6' : '#111827',
+  dim: dark ? '#9fb0c0' : '#6b7280',
+  senderNameColor: dark ? '#e6eef6' : '#111827',
+  link: '#2ea3ff',
+  border: dark ? '#1f2530' : '#e5e7eb',
+  badgeBg: dark ? 'rgba(159,176,192,0.18)' : 'rgba(107,114,128,0.12)',
+  sheetBg: dark ? '#0f141a' : '#fff',
+  sheetHandle: dark ? '#2b3440' : '#e5e7eb',
+  chipBg: dark ? 'rgba(230,238,246,0.08)' : 'rgba(17,24,39,0.04)',
+});
+ */
+
 export const Colors = {
   light: {
     // Text
     text: '#11181C',
     textDim: '#666666',
     textMuted: '#999999',
+
+    // Link
+    link: '#2ea3ff',
 
     // Surfaces
     background: '#FFFFFF',      // 화면 배경
@@ -36,6 +55,18 @@ export const Colors = {
     // Tabs (기존 값 유지)
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+
+    // === Chat specific (semantic tokens) ===
+    chat: {
+      bubbleMineBg: '#D9D7EF',              // 내가 보낸 말풍선 배경
+      bubbleOtherBg: '#f1f1f1',             // 상대 말풍선 배경
+      readBadgeBg: 'rgba(107,114,128,0.12)',// 배지 배경(은은한 회색)
+      chipBg: 'rgba(17,24,39,0.04)',        // 모달 칩 배경
+      sheetBg: '#FFFFFF',                   // 모달 시트 배경
+      sheetHandle: '#E5E7EB',               // 모달 핸들바 색
+      imagePlaceholder: '#F3F4F6',          // 이미지 로딩용(선택)
+      senderNameColor: '#111827',           // 보낸 사람 이름 색
+    },
   },
 
   dark: {
@@ -43,6 +74,9 @@ export const Colors = {
     text: '#ECEDEE',
     textDim: '#B7BDC3',
     textMuted: '#8B9197',
+
+    // Link
+    link: '#2ea3ff',
 
     // Surfaces
     background: '#151718',
@@ -69,6 +103,18 @@ export const Colors = {
     // Tabs (기존 값 유지)
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+
+    // === Chat specific ===
+    chat: {
+      bubbleMineBg: '#4A4F5A',
+      bubbleOtherBg: '#373C43',
+      readBadgeBg: 'rgba(159,176,192,0.18)',
+      chipBg: 'rgba(230,238,246,0.08)',
+      sheetBg: '#0F141A',
+      sheetHandle: '#2B3440',
+      imagePlaceholder: '#0E1113',
+      senderNameColor: '#E6EEF6',           // 보낸 사람 이름 색
+    },
   },
 };
 

@@ -5,7 +5,10 @@ import { ChatSendType } from './chatService';
 export class ChatSocketService {
   static sendChatMessage(chatRoomSeq: number, sendMessage: ChatSendType): void {
     const mgr = stompManager();
-    console.log('sendChatMessage', sendMessage);
     mgr.sendApp(`/newMessage/${chatRoomSeq}`, sendMessage);
+  }
+  static sendReadMessage(memberSeq: number, chatRoomSeq: number, chatSeq: number): void {
+    const mgr = stompManager();
+    mgr.sendApp(`/read/room/${chatRoomSeq}/${chatSeq}`, { memberSeq });
   }
 }

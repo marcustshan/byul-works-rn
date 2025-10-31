@@ -18,14 +18,16 @@ import {
 
 import ChatService, { ChatMessage, ChatPageRequest, ChatSendType } from '@/api/chat/chatService';
 import { ChatSocketService } from '@/api/chat/chatSocketService';
+import { MemberService } from '@/api/memberService';
 import ChatBubble from '@/components/chat/ChatBubble';
 import ChatRoomHeader from '@/components/chat/ChatRoomHeader';
 import { Colors } from '@/constants/theme';
 import { selectUserInfo } from '@/hooks/selectors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { selectChatRoomBySeq } from '@/selectors/chat/chatSelectors';
+import { stompManager } from '@/socket/stompClient';
 import type { UserInfo } from '@/store/authSlice';
-import { clearActiveChatRoomSeq, setActiveChatRoomSeq } from '@/store/chatRoomSlice';
+import { clearActiveChatRoomSeq, clearChatRoomUnread, setActiveChatRoomSeq, updateChatRoom } from '@/store/chatRoomSlice';
 import { useAppSelector } from '@/store/hooks';
 
 export default function ChatRoomScreen() {
@@ -62,18 +64,23 @@ export default function ChatRoomScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
 
+  // 소켓 매니저
+  const mgr = stompManager();
+
+  // 소켓 구독 참조
+  const roomSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const readSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       // ✅ 화면에 진입했을 때 실행
       const seq = Number(chatRoomSeq);
       if (!Number.isNaN(seq)) {
-        console.log(`[ChatRoomScreen] 진입 → setActiveChatRoom(${seq})`);
         dispatch(setActiveChatRoomSeq(seq));
       }
 
       // ✅ 화면에서 벗어날 때 실행 (다른 페이지로 이동)
       return () => {
-        console.log('[ChatRoomScreen] 이탈 → clearActiveChatRoom()');
         dispatch(clearActiveChatRoomSeq());
       };
     }, [dispatch, chatRoomSeq])
@@ -89,7 +96,10 @@ export default function ChatRoomScreen() {
     if (!Number.isFinite(chatRoomSeq)) return;
     setLoading(true);
     try {
+      // 방 참여 처리 (읽음 처리 포함)
       await ChatService.joinRoom(chatRoomSeq).catch(() => {});
+      // 해당 방에 대한 안읽음 초기화 (전부 읽음으로 가정)
+      dispatch(clearChatRoomUnread(chatRoomSeq));
       const page = await ChatService.getRoomMessages(chatRoomSeq, { size: 30 });
       setMessages(sortMessages(page.content) ?? []);
 
@@ -105,6 +115,96 @@ export default function ChatRoomScreen() {
   useEffect(() => {
     loadInitial();
   }, [loadInitial]);
+
+  const upsertNewMessage = useCallback((incoming: ChatMessage) => {
+    incoming.memberName = MemberService.getMemberName(incoming.memberSeq);
+    ChatSocketService.sendReadMessage(memberSeq, chatRoomSeq, incoming.chatSeq);
+    setMessages((prev) => {
+      // ❗중복 방지 (chatSeq가 서버 고유키라면 이걸로 충분)
+      if (prev.some((m) => m.chatSeq === incoming.chatSeq)) return prev;
+
+      // 일반 케이스: 추가 후 정렬(당신의 sortMessages는 내림차순)
+      return sortMessages([...prev, incoming]);
+    });
+  }, [sortMessages]);
+
+  // ✅ 방 토픽 구독 (재연결/방 변경 시 재구독)
+  useEffect(() => {
+    let canceled = false;
+
+    async function connectAndSubscribe() {
+      // (선택) 연결 대기 유틸이 있으면 여기서 await
+      if (!mgr.isConnected()) {
+        // 간단 가드: 연결 안돼 있으면 다음 기회에(connected 플래그가 있다면 그걸 의존성에 추가)
+        return;
+      }
+
+      // 기존 구독 정리(중복 구독 방지)
+      roomSubRef.current?.unsubscribe?.();
+      readSubRef.current?.unsubscribe?.();
+      roomSubRef.current = null;
+      readSubRef.current = null;
+
+      // 채팅 읽음 처리 구독
+      const readSub = mgr.subscribe(`/topic/readRoom/${chatRoomSeq}`, (frame) => {
+        if (canceled) return;
+        const body: ChatMessage = JSON.parse(frame.body);
+        setMessages(prev =>
+          prev.map(m => {
+            if (m.chatSeq !== body.chatSeq) return m;
+            if (m.readMembers?.includes(body.memberSeq)) return m;
+            return { ...m, readMembers: [...(m.readMembers ?? []), body.memberSeq] };
+          })
+        );
+
+        dispatch(updateChatRoom({
+          chatRoomSeq: body.chatRoomSeq,
+          content: body.content,
+          createDate: body.createDate,
+          memberSeq: body.memberSeq,
+          incUnread: false,
+        }));
+      });
+
+      // 채팅 메시지 구독
+      const sub = mgr.subscribe(`/topic/newMessage/${chatRoomSeq}`, (frame) => {
+        if (canceled) return;
+        const body: ChatMessage = JSON.parse(frame.body);
+
+        upsertNewMessage(body);
+        
+        dispatch(updateChatRoom({
+          chatRoomSeq: body.chatRoomSeq,
+          content: body.content,
+          createDate: body.createDate,
+          memberSeq: body.memberSeq,
+          incUnread: false,
+        }));
+
+        // 내가 하단 근처일 때만 자동 스크롤(선택)
+        requestAnimationFrame(() => {
+          // inverted=true 이므로 'offset 0'이 맨 아래
+          // 조건 로직이 있으면 넣고, 단순하게는 무조건 붙여도 OK
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        });
+      });
+
+      roomSubRef.current = sub;
+      readSubRef.current = readSub;
+    }
+
+    connectAndSubscribe();
+
+    return () => {
+      canceled = true;
+      roomSubRef.current?.unsubscribe?.();
+      roomSubRef.current = null;
+      readSubRef.current?.unsubscribe?.();
+      readSubRef.current = null;
+    };
+    // ⬇️ socket 연결 상태 플래그가 있다면 여기에 함께 의존시키면 재연결 시 자동 재구독됩니다.
+  }, [chatRoomSeq, upsertNewMessage /* , connected */]);
+
 
   // ✅ 최상단에서 더 불러오기 (스크롤 이동/복원 없음)
   const loadOlder = useCallback(async () => {

@@ -132,24 +132,6 @@ export class ChatService {
     }
   }
 
-
-
-  /**
-   * 특정 메시지를 읽음 처리합니다.
-   * @param chatRoomSeq 채팅방 번호
-   * @param chatSeq 메시지 번호
-   * @returns 읽음 처리 결과
-   */
-  public static async readMessage(chatRoomSeq: number, chatSeq: number): Promise<boolean> {
-    try {
-      await api.post(`/read/room/${chatRoomSeq}/${chatSeq}`);
-      return true;
-    } catch (error: any) {
-      console.error('📖 읽음 처리 실패:', error);
-      throw error;
-    }
-  }
-
   /**
    * 특정 메시지를 읽은 사용자 목록을 조회합니다.
    * @param chatRoomSeq 채팅방 번호

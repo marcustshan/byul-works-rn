@@ -287,7 +287,7 @@ const ChatListItem = React.memo(function ChatListItem({
   const initials = isGroup ? (title.slice(0, 2) || '채팅').toUpperCase() : (title.slice(1, 3) || '채팅').toUpperCase();
 
   const API_BASE_URL = getCurrentApiConfig().BASE_URL;
-  const encodedImgId = encodeBase64(room.chatRoomImgId ?? '');
+  const encodedFileSeq = encodeBase64(room.chatRoomImgId ?? '');
 
   // 🔻 다크테마 대비 개선: 배경에 따라 텍스트 색 자동 선택
   const hasImage = !!room.chatRoomImgId;
@@ -314,7 +314,7 @@ const ChatListItem = React.memo(function ChatListItem({
       <View style={[styles.roomIcon, { backgroundColor: roomIconBg }]}>
         {hasImage ? (
           <Image
-            source={{ uri: `${API_BASE_URL}/file/preview/${encodedImgId}` }}
+            source={{ uri: `${API_BASE_URL}/file/preview/${encodedFileSeq}` }}
             style={styles.roomImage}
             resizeMode="cover"
           />
