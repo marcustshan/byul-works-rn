@@ -49,7 +49,7 @@ export default function Footer() {
       label: '일정',
       icon: 'calendar-outline',
       activeIcon: 'calendar',
-      route: '/schedule',
+      route: '/schedule/schedule',
       matchers: ['/schedule', /^\/schedule(\/|$)/],
     },
     {

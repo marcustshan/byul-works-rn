@@ -50,17 +50,16 @@ export default function RootLayout() {
   // 안드로이드 백키 이벤트 처리
   useEffect(() => {
     const backAction = () => {
-      if (currentPath === '/main') {
-        Alert.alert('앱 종료', '앱을 종료하시겠습니까?', [
-          { text: '취소', style: 'cancel' },
-          { text: '종료', onPress: () => BackHandler.exitApp() },
-        ]);
-        return true;
-      } else if (currentPath === '/notifications' || currentPath === '/chat-room-list') {
-        router.push('/main');
-        return true;
+      if (router.canGoBack?.()) {
+        router.back();              // ✅ 단순 뒤로가기
+        return true;                // 우리가 처리했음을 알림
       }
-      return false;
+      // 뒤로갈 스택이 없을 때만 종료 확인 (원하지 않으면 아래 블록도 제거 가능)
+      Alert.alert('앱 종료', '앱을 종료하시겠습니까?', [
+        { text: '취소', style: 'cancel' },
+        { text: '종료', onPress: () => BackHandler.exitApp() },
+      ]);
+      return true;
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();

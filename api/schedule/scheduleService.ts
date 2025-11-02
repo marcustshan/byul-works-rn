@@ -43,6 +43,22 @@ export interface Schedule {
   codeSubName?: string;
 }
 
+// 일정 코드 데이터 타입 정의
+export interface ScheduleCode {
+  createId: string;
+  createDate: string;
+  createIp: string;
+  updateId: string | null;
+  updateDate: string | null;
+  updateIp: string | null;
+  scheduleCodeSeq: number;
+  scheduleCode: string;
+  scheduleCodeName: string;
+  scheduleCodeSub: string | null;
+  scheduleCodeSubName: string | null;
+  scheduleCodeColor: string;
+}
+
 // 오늘 일정 응답 타입
 export type TodayScheduleResponse = Schedule[];
 
@@ -142,6 +158,15 @@ export class ScheduleService {
     const { data } = await api.delete(`/schedule/personalSchedule/${personalScheduleSeq}`);
     
     console.log('📅 [ScheduleService] 개인 일정 삭제 성공:', personalScheduleSeq);
+    return data;
+  }
+
+  public static async getScheduleCodeList(): Promise<ScheduleCode[]> {
+    const { data } = await api.get<ScheduleCode[]>('/schedule/scheduleCode/selectScheduleCodeList');
+    if (!data || !Array.isArray(data)) {
+      console.log('📅 [ScheduleService] 일정 코드 데이터가 없거나 형식이 올바르지 않음');
+      return [];
+    }
     return data;
   }
 }

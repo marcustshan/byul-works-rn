@@ -7,6 +7,7 @@ import { store } from '@/store';
 import { encodeBase64, getWeekdayLabel } from '@/utils/commonUtil';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
+import * as Clipboard from 'expo-clipboard';
 import React, { useMemo, useState } from 'react';
 import {
   Image,
@@ -21,6 +22,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ChatContextMenu from './ChatContextMenu';
 import FullMessageModal from './FullMessageModal';
 import ImageViewerModal from './ImageViewerModal';
 
@@ -40,6 +42,13 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   const [showContentModal, setShowContentModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const openContextMenu = (message: string) => {
+    setPressedMessage(message);
+    setMenuOpen(true);
+  };
+  const [pressedMessage, setPressedMessage] = useState<string | null>(null);
+
   // (추가) 길이 판단 유틸 — 너무 정교할 필요 없이 글자수 기준
   const plainText = stripHtmlMentions(message.content ?? '');
   const isLong = message.chatType === 'M' && plainText.length > 240; // 240자 이상이면 '더보기'
@@ -57,6 +66,19 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
     return selectMemberProfileColor(seq)(store.getState());
   }
 
+  const handleReply = (msg: ChatMessage) => {
+    // 화면 단(예: ChatRoomScreen)에서 reply UI를 띄우도록 콜백을 끌어올리는 것도 추천
+    // props.onReply?.(msg);
+  };
+  
+  const handleCopy = async (text: string) => {
+    if (text) await Clipboard.setStringAsync(text);
+  };
+  
+  const handleShare = (payload: { message?: string; url?: string }) => {
+    // 필요 시 커스텀 공유 로직으로 대체 가능 (기본은 ChatContextMenu 내에서 Share.share 호출)
+  };
+
   const renderContent = () => {
     switch (message.chatType) {
       case 'I':
@@ -64,7 +86,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         const encodedFileSeq = encodeBase64(message.fileSeq?.toString() ?? '');
         return (
           <>
-            <Pressable onPress={() => setShowImageViewer(true)}>
+            <Pressable onLongPress={() => openContextMenu(message.fileName)} onPress={() => setShowImageViewer(true)}>
               <Image
                 source={{ uri: `${API_BASE_URL}/file/preview/${encodedFileSeq}` }}
                 style={styles.image}
@@ -72,7 +94,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
             </Pressable>
             <ImageViewerModal
               visible={showImageViewer}
-              uri={`${API_BASE_URL}/file/preview/${encodedFileSeq}`}
+              uri={`${API_BASE_URL}/file/preview/original/${encodedFileSeq}`}
               onClose={() => setShowImageViewer(false)}
               title={`${message.fileName ?? message.content}`}
               background="light"   // 항상 흰 배경 (옵션)
@@ -83,7 +105,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         );
       case 'F':
         return (
-          <TouchableOpacity onPress={() => { /* TODO */ }}>
+          <TouchableOpacity onLongPress={() => openContextMenu(message.fileName)} onPress={() => { /* TODO */ }}>
             <Text style={[styles.file, { color: c.text }]} numberOfLines={2}>
               📎 {message.fileName ?? message.content}
             </Text>
@@ -92,13 +114,13 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         );
       case 'L':
         return (
-          <Text style={[styles.link, { color: c.tint }]} onPress={() => Linking.openURL(message.content)}>
+          <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message.content)} onPress={() => Linking.openURL(message.content)}>
             {message.content}
           </Text>
         );
       default:
         return (
-          <View>
+          <Pressable onLongPress={() => openContextMenu(plainText)}>
             <Text
               style={[styles.text, { color: c.text }]}
               numberOfLines={isLong ? 6 : undefined} // 미리보기는 6줄로 제한
@@ -110,7 +132,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
                 <Text style={{ color: c.tint, fontSize: 12 }}>더보기</Text>
               </Pressable>
             )}
-          </View>
+          </Pressable>
         );
     }
   };
@@ -173,6 +195,16 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
           </Pressable>
         )}
       </View>
+
+      <ChatContextMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        message={message}
+        onReply={handleReply}
+        onCopy={handleCopy}
+        onShare={handleShare}
+        title={pressedMessage ?? '메시지'}
+      />
 
       {/* 읽음/안읽음 모달 */}
       <Modal
