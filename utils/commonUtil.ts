@@ -64,7 +64,7 @@ export function isWeekend(date: InputDate) {
  * @returns 
  */
 export const encodeBase64 = (value: string) => {
-  return btoa(value);
+  return btoa(unescape(encodeURIComponent(value)));
 };
 
 /**
@@ -73,5 +73,5 @@ export const encodeBase64 = (value: string) => {
  * @returns 
  */
 export const decodeBase64 = (value: string) => {
-  return atob(value);
+  return decodeURIComponent(escape(atob(value)));
 };

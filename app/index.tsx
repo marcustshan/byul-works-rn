@@ -17,8 +17,9 @@ export default function LandingScreen() {
 
     const checkToken = async () => {
       try {
-        const autoLoginInfo = await getAutoLoginInfo();
         if (!mounted) return;
+
+        const autoLoginInfo = await getAutoLoginInfo();
 
         if (autoLoginInfo) {
           await dispatch(postLoginProcess({ includeMemberInfo: true }));

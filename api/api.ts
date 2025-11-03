@@ -1,9 +1,10 @@
 // src/lib/api.ts
 import { store } from '@/store';
-import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { router } from 'expo-router';
 
 import { getCurrentApiConfig } from '@/constants/environment';
+import { Platform } from 'react-native';
 
 const BASE_URL = getCurrentApiConfig().BASE_URL;
 
@@ -50,8 +51,10 @@ function toApiError(e: unknown): ApiErrorShape {
 
 // --- 요청 인터셉터: 토큰 자동 주입 ---
 api.interceptors.request.use(
-  async (config: AxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig) => {
     const token = store.getState().auth.token;
+    config.headers['X-Client'] = 'byulworksrn';
+    config.headers['X-Device-Platform'] = Platform.OS === 'ios' ? 'iOS' : 'AOS';
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }

@@ -243,11 +243,6 @@ export default function ImageViewerModal({
                 </Animated.View>
               </GestureDetector>
             </View>
-
-            {/* 하단 바 (컨트롤 자리) */}
-            <View style={[styles.bottomBar, { backgroundColor: chromeBg }]}>
-              {/* 예: 배율 표시/리셋 버튼 등을 원하면 이곳에 추가 */}
-            </View>
           </SafeAreaView>
         </View>
       </GestureHandlerRootView>
@@ -286,6 +281,7 @@ const styles = StyleSheet.create({
   centerArea: {
     flex: 1,
     position: 'relative',
+    overflow: 'hidden',
   },
   gestureLayer: {
     flex: 1,
@@ -294,10 +290,4 @@ const styles = StyleSheet.create({
   },
   // 실제 width/height는 animated style에서 지정
   image: {},
-
-  bottomBar: {
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingHorizontal: 12,
-  },
 });

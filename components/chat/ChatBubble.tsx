@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import * as Clipboard from 'expo-clipboard';
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   Linking,
   Modal,
@@ -25,6 +26,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ChatContextMenu from './ChatContextMenu';
 import FullMessageModal from './FullMessageModal';
 import ImageViewerModal from './ImageViewerModal';
+
+import { FileService } from '@/api/fileService';
+import { EmojiMapper } from '@/utils/emojiMapper';
 
 
 type Props = {
@@ -66,6 +70,15 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
     return selectMemberProfileColor(seq)(store.getState());
   }
 
+  const downloadFile = (message: ChatMessage) => {
+    Alert.alert('파일 다운로드', '파일을 다운로드 하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      { text: '다운로드', onPress: () => {
+        FileService.downloadFile(message);
+      } },
+    ]);
+  }
+
   const handleReply = (msg: ChatMessage) => {
     // 화면 단(예: ChatRoomScreen)에서 reply UI를 띄우도록 콜백을 끌어올리는 것도 추천
     // props.onReply?.(msg);
@@ -86,7 +99,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         const encodedFileSeq = encodeBase64(message.fileSeq?.toString() ?? '');
         return (
           <>
-            <Pressable onLongPress={() => openContextMenu(message.fileName)} onPress={() => setShowImageViewer(true)}>
+            <Pressable onLongPress={() => openContextMenu(message.fileName ?? '')} onPress={() => setShowImageViewer(true)}>
               <Image
                 source={{ uri: `${API_BASE_URL}/file/preview/${encodedFileSeq}` }}
                 style={styles.image}
@@ -103,13 +116,19 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
             />
           </>
         );
+      case 'E':
+        return (
+          <View style={styles.emojiWrap}>
+          <Image source={EmojiMapper[message.emojiPath ?? '']} style={styles.emojiImage} />
+          </View>
+        );
       case 'F':
         return (
-          <TouchableOpacity onLongPress={() => openContextMenu(message.fileName)} onPress={() => { /* TODO */ }}>
+          <TouchableOpacity onLongPress={() => openContextMenu(message.fileName ?? '')} onPress={() => { downloadFile(message) }}>
             <Text style={[styles.file, { color: c.text }]} numberOfLines={2}>
               📎 {message.fileName ?? message.content}
             </Text>
-            <Text style={[styles.hint, { color: c.textDim }]}>탭하여 파일 열기</Text>
+            <Text style={[styles.hint, { color: c.textDim }]}>크기 : {message.fileSize ?? '0'}</Text>
           </TouchableOpacity>
         );
       case 'L':
@@ -320,7 +339,7 @@ function stripHtmlMentions(html: string) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginVertical: 6, maxWidth: '90%' },
+  wrap: { marginVertical: 6, maxWidth: '100%', paddingHorizontal: 6 },
   senderWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   senderProfileCircle: { width: 14, height: 14, borderRadius: 10, marginBottom: 2 },
   sender: { fontSize: 14, marginBottom: 4, fontWeight: '600' },
@@ -331,6 +350,8 @@ const styles = StyleSheet.create({
   },
   text: { fontSize: 15, lineHeight: 21 },
   link: { fontSize: 15, textDecorationLine: 'underline' },
+  emojiWrap: { backgroundColor: '#ffffff', borderRadius: 16 },
+  emojiImage: { width: 120, height: 120, resizeMode: 'contain' },
   file: { fontSize: 14, fontWeight: '600' },
   hint: { fontSize: 12, marginTop: 2 },
 

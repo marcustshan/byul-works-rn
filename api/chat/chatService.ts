@@ -72,6 +72,7 @@ export interface ChatSendType {
   memberName: string;
   chatRoomName: string;
   chatRoomSeq: number;
+  fileSeq?: number;
   chatType: 'M' | 'I' | 'F' | 'L'; // M: 메시지, I: 이미지, F: 파일, L: 링크
   parentChat?: ChatMessage | null; // 답장인 경우 부모 메시지 전체 객체
 }

@@ -2,11 +2,11 @@
 import { Schedule, ScheduleCode, ScheduleService } from '@/api/schedule/scheduleService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useThemeColor } from '@/hooks/use-theme-color';
+import { Colors } from '@/constants/theme';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -70,16 +70,8 @@ function getScheduleColor(
 // Screen
 // ────────────────────────────────────────────────────────────────────────────────
 export default function ScheduleScreen() {
-  const backgroundColor = useThemeColor({}, 'background') as string;
-  const textColor = useThemeColor({}, 'text') as string;
-  const borderColor = useThemeColor({}, 'border') as string;
-  const surface = useThemeColor({}, 'surface') as string;
-  const surfaceToday = useThemeColor({}, 'surfaceToday') as string;
-  const tint = useThemeColor({}, 'tint') as string;
-  const onPrimary = useThemeColor({}, 'onPrimary') as string;
-  const danger = useThemeColor({}, 'danger') as string;
-  const link = useThemeColor({}, 'link') as string;
-  const tabIconDefault = useThemeColor({}, 'tabIconDefault') as string;
+  const colorScheme = useColorScheme();
+  const c = Colors[colorScheme ?? 'light'];
 
   const today = dayjs();
   const [viewMode, setViewMode] = useState<'compact'|'large'>('compact');
@@ -160,18 +152,18 @@ export default function ScheduleScreen() {
     // dot
     Object.keys(scheduleByDate).forEach(dateStr => {
       if (scheduleByDate[dateStr]?.length) {
-        marks[dateStr] = { marked: true, dotColor: tint };
+        marks[dateStr] = { marked: true, dotColor: c.link };
       }
     });
     // selected
     marks[selectedDate] = {
       ...(marks[selectedDate] || {}),
       selected: true,
-      selectedColor: tint,
-      selectedTextColor: onPrimary,
+      selectedColor: c.tint,
+      selectedTextColor: c.onPrimary,
     };
     return marks;
-  }, [scheduleByDate, selectedDate, tint, onPrimary]);
+  }, [scheduleByDate, selectedDate, c]);
 
   const onDayPress = (day: { dateString: string }) => setSelectedDate(day.dateString);
   const onMonthChange = (m: { year: number; month: number }) => {
@@ -203,18 +195,18 @@ export default function ScheduleScreen() {
         activeOpacity={0.8}
         style={[
           styles.dayCell,
-          { borderColor, backgroundColor: surface },
-          isSelected && { borderColor: tint, borderWidth: 2 },
-          isToday && { backgroundColor: surfaceToday },
+          { borderColor: c.border, backgroundColor: c.surface },
+          isSelected && { borderColor: c.tint, borderWidth: 2 },
+          isToday && { backgroundColor: c.surfaceToday },
         ]}
         onPress={() => onDayPress(date)}
       >
         <ThemedText
           style={[
             styles.dayNumber,
-            isSun && { color: danger },
-            isSat && { color: link },
-            isSelected && { color: tint, fontWeight: '700' },
+            isSun && { color: c.danger },
+            isSat && { color: c.link },
+            isSelected && { color: c.tint, fontWeight: '700' },
           ]}
         >
           {d.date()}
@@ -226,7 +218,7 @@ export default function ScheduleScreen() {
               key={(s.scheduleSeq ?? s.personalScheduleSeq ?? i).toString() + '-' + i}
               style={[
                 styles.badge,
-                { backgroundColor: getScheduleColor(s, scheduleCodeList, tint) },
+                { backgroundColor: getScheduleColor(s, scheduleCodeList, c.tint) },
               ]}
             >
               <ThemedText style={styles.badgeText} numberOfLines={1}>
@@ -256,16 +248,16 @@ export default function ScheduleScreen() {
       >
         {/* Controls */}
         <View style={styles.controlsRow}>
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: tint }]} onPress={toggleView}>
-            <ThemedText style={[styles.primaryBtnText, { color: onPrimary }]}>{viewMode === 'compact' ? '크게 보기' : '작게 보기'}</ThemedText>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: c.tint }]} onPress={toggleView}>
+            <ThemedText style={[styles.primaryBtnText, { color: c.onPrimary }]}>{viewMode === 'compact' ? '크게 보기' : '작게 보기'}</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.ghostBtn, { borderColor }]} onPress={goToToday}>
+          <TouchableOpacity style={[styles.ghostBtn, { borderColor: c.border }]} onPress={goToToday}>
             <ThemedText style={styles.ghostBtnText}>오늘</ThemedText>
           </TouchableOpacity>
         </View>
 
         {/* Calendar */}
-        <View style={[styles.calendarWrap, { borderColor }]}>
+        <View style={[styles.calendarWrap, { borderColor: c.border }]}>
         {viewMode === 'large' ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled>
             <View
@@ -290,22 +282,22 @@ export default function ScheduleScreen() {
                 enableSwipeMonths={false}
                 dayComponent={DayCell}
                 renderArrow={(direction) => (
-                  <View style={[styles.arrow, { backgroundColor: tint }]}>
-                    <ThemedText style={[styles.arrowText, { color: onPrimary }]}>
+                  <View style={[styles.arrow, { backgroundColor: c.tint }]}>
+                    <ThemedText style={[styles.arrowText, { color: c.onPrimary }]}>
                       {direction === 'left' ? '◀' : '▶'}
                     </ThemedText>
                   </View>
                 )}
                 theme={{
-                  backgroundColor,
-                  calendarBackground: backgroundColor,
-                  textSectionTitleColor: textColor,
-                  selectedDayTextColor: onPrimary,
-                  todayTextColor: tint,
-                  dayTextColor: textColor,
-                  textDisabledColor: tabIconDefault,
-                  arrowColor: tint,
-                  monthTextColor: textColor,
+                  backgroundColor: c.background,
+                  calendarBackground: c.background,
+                  textSectionTitleColor: c.text,
+                  selectedDayTextColor: c.onPrimary,
+                  todayTextColor: c.tint,
+                  dayTextColor: c.text,
+                  textDisabledColor: c.tabIconDefault,
+                  arrowColor: c.tint,
+                  monthTextColor: c.text,
                   textDayFontWeight: '600',
                   textMonthFontWeight: '700',
                   textDayHeaderFontWeight: '600',
@@ -332,22 +324,22 @@ export default function ScheduleScreen() {
             hideExtraDays={false}
             enableSwipeMonths={false}
             renderArrow={(direction) => (
-              <View style={[styles.arrow, { backgroundColor: tint }]}>
-                <ThemedText style={[styles.arrowText, { color: onPrimary }]}>
+              <View style={[styles.arrow, { backgroundColor: c.tint }]}>
+                <ThemedText style={[styles.arrowText, { color: c.onPrimary }]}>
                   {direction === 'left' ? '◀' : '▶'}
                 </ThemedText>
               </View>
             )}
             theme={{
-              backgroundColor,
-              calendarBackground: backgroundColor,
-              textSectionTitleColor: textColor,
-              selectedDayTextColor: onPrimary,
-              todayTextColor: tint,
-              dayTextColor: textColor,
-              textDisabledColor: tabIconDefault,
-              arrowColor: tint,
-              monthTextColor: textColor,
+              backgroundColor: c.background,
+              calendarBackground: c.background,
+              textSectionTitleColor: c.text,
+              selectedDayTextColor: c.onPrimary,
+              todayTextColor: c.tint,
+              dayTextColor: c.text,
+              textDisabledColor: c.tabIconDefault,
+              arrowColor: c.tint,
+              monthTextColor: c.text,
               textDayFontWeight: '600',
               textMonthFontWeight: '700',
               textDayHeaderFontWeight: '600',
@@ -361,7 +353,7 @@ export default function ScheduleScreen() {
       </View>
 
         {/* Selected date list */}
-        <ThemedView style={[styles.listWrap, { borderColor }]}>
+        <ThemedView style={[styles.listWrap, { borderColor: c.border }]}>
           <View style={styles.listHeader}>
             <ThemedText style={styles.listTitle}>선택한 날짜: {selectedDate}</ThemedText>
             {loading && <ThemedText style={{ opacity: 0.6 }}>불러오는 중…</ThemedText>}
@@ -378,7 +370,7 @@ export default function ScheduleScreen() {
               ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
               scrollEnabled={false}
               renderItem={({ item }) => {
-                const color = getScheduleColor(item, scheduleCodeList, tint);
+                const color = getScheduleColor(item, scheduleCodeList, c.tint);
                 // 시간 표기(개인/종일은 간단 표기)
                 let timeStr: string | null = null;
                 if (item.isPersonal || item.personal) {
@@ -392,7 +384,7 @@ export default function ScheduleScreen() {
                   timeStr = `${pad(s.getHours())}:${pad(s.getMinutes())} ~ ${pad(e.getHours())}:${pad(e.getMinutes())}`;
                 }
                 return (
-                  <View style={[styles.card, { borderColor }]}>
+                  <View style={[styles.card, { borderColor: c.border }]}>
                     <View style={[styles.colorBar, { backgroundColor: color }]} />
                     <View style={{ flex: 1 }}>
                       <ThemedText style={styles.cardTitle} numberOfLines={1}>
@@ -430,7 +422,7 @@ const styles = StyleSheet.create({
   ghostBtnText: { fontWeight: '700' },
 
   calendarWrap: { borderWidth: 1, borderRadius: 12, marginBottom: 12 },
-  calendar: { padding: 8 },
+  calendar: { padding: 8, borderRadius: 12, overflow: 'hidden' },
   arrow: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, minWidth: 40, alignItems: 'center' },
   arrowText: { fontWeight: '700' },
 

@@ -1,6 +1,8 @@
 // theme.ts
 import { Platform } from 'react-native';
 
+const signatureColor = '#662D91';
+
 const tintColorLight = '#662D91';
 const tintColorDark = '#ffffff';
 
@@ -22,6 +24,7 @@ const palette = (dark: boolean) => ({
 
 export const Colors = {
   light: {
+    signatureColor: signatureColor,
     // Text
     text: '#11181C',
     textDim: '#666666',
@@ -70,6 +73,7 @@ export const Colors = {
   },
 
   dark: {
+    signatureColor: signatureColor,
     // Text
     text: '#ECEDEE',
     textDim: '#B7BDC3',

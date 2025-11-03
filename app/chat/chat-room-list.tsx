@@ -268,7 +268,9 @@ const ChatListItem = React.memo(function ChatListItem({
 }: { room: ChatRoom; colors: AppColors; onPress: () => void }) {
   const isGroup = (room.joinCnt ?? 0) >= 3;
   const unreadCount = room.newCnt ?? 0;
-  const lastMessage = room.lastInsertMsg ?? '';
+  const lastMessageMemberSeq = room.lastMsgMemberSeq ?? 0;
+  const lastMessageMemberName = MemberService.getMemberName(lastMessageMemberSeq);
+  const lastMessage = lastMessageMemberName + ' : ' + room.lastInsertMsg;
   const lastTimestamp = room.lastInsertDate || room.createDate;
 
   const userInfo = useAppSelector(selectUserInfo);

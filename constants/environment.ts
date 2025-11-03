@@ -1,8 +1,8 @@
 // 환경 설정을 중앙에서 관리하는 파일
 export type Environment = 'DEVELOPMENT' | 'PRODUCTION' | 'TEST';
 
-export const CURRENT_ENV: Environment = "PRODUCTION";
-// export const CURRENT_ENV: Environment = "DEVELOPMENT";
+// export const CURRENT_ENV: Environment = "PRODUCTION";
+export const CURRENT_ENV: Environment = "DEVELOPMENT";
 
 // 환경별 API 설정
 export const API_CONFIG = {
@@ -96,3 +96,5 @@ export const isDevelopment = () => CURRENT_ENV === 'DEVELOPMENT';
 export const isProduction = () => CURRENT_ENV === 'PRODUCTION';
 export const isTest = () => CURRENT_ENV === 'TEST';
 
+
+export const FILE_URL_SALT = '별 미리보기이미지 소프트';

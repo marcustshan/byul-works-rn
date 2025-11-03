@@ -1,6 +1,8 @@
 // screens/ChatRoomScreen.tsx
 import { useAppDispatch } from '@/store/hooks';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -18,9 +20,12 @@ import {
 
 import ChatService, { ChatMessage, ChatPageRequest, ChatSendType } from '@/api/chat/chatService';
 import { ChatSocketService } from '@/api/chat/chatSocketService';
+import { FileService, FileUpload } from '@/api/fileService';
 import { MemberService } from '@/api/memberService';
 import ChatBubble from '@/components/chat/ChatBubble';
 import ChatRoomHeader from '@/components/chat/ChatRoomHeader';
+import EmojiPickerModal from '@/components/chat/EmojiPickerModal';
+import PlusMenuSheet from '@/components/chat/PlustMenuSheet';
 import { Colors } from '@/constants/theme';
 import { selectUserInfo } from '@/hooks/selectors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -64,12 +69,183 @@ export default function ChatRoomScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const inputRef = useRef<TextInput>(null);
 
+  // 더보기 모달 상태
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+
   // 소켓 매니저
   const mgr = stompManager();
 
   // 소켓 구독 참조
   const roomSubRef = useRef<{ unsubscribe: () => void } | null>(null);
-  const readSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const readSubRef = useRef<{ unsubscribe: () => void } | null>(null);  // ------ 업로드 API 연동 (서버 스펙에 맞게 구현) ------
+
+  // ------ 업로드 API 연동 (서버 스펙에 맞게 구현) ------
+  async function uploadFileToServer(
+    file: File, 
+    fileType: string,
+    tableName: string,
+  ): Promise<FileUpload> {
+    try {
+      const uploaded = await FileService.uploadFile({
+        fileType: fileType,
+        tableName: tableName,
+        file, 
+      });
+      return uploaded;
+    } catch (e) {
+      console.error('file upload failed', e);
+      throw e;
+    }
+  }
+
+  // ------ 전송 도우미 ------
+  const sendImageFromPicker = useCallback(async () => {
+    setPlusOpen(false);
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+    if (picked.canceled) return;
+
+    try {
+      const asset = picked.assets[0];
+      const fileName = asset.fileName || `image_${Date.now()}.jpg`;
+      const mime = asset.type === 'image' ? 'image/jpeg' : undefined;
+
+      const uploaded = await uploadFileToServer(asset.file, 'I', 'chat',);
+
+      // 서버가 fileSeq를 주면 이미지 메시지 전송
+      const sendMessage: ChatSendType = {
+        content: '', // 이미지 컨텐츠는 서버에서 fileSeq로 식별
+        memberName,
+        chatRoomName: roomTitle,
+        chatRoomSeq,
+        chatType: 'I',
+        fileSeq: uploaded.fileSeq,
+        fileName: uploaded.fileName,
+        fileSize: uploaded.fileSize ?? null,
+      };
+
+      // 낙관적 메세지
+      const optimistic: ChatMessage = {
+        chatSeq: Date.now() * -1,
+        chatRoomSeq,
+        chatRoomName: roomTitle,
+        memberSeq,
+        memberName,
+        profileColor: null,
+        chatType: 'I',
+        content: '',               // 미리보기는 ChatBubble에서 fileSeq 기반으로 처리
+        emojiPath: null,
+        fileSeq: uploaded.fileSeq, // ★ 미리 fileSeq를 할당해야 미리보기 가능
+        fileName: uploaded.fileName,
+        fileSize: uploaded.fileSize ?? null,
+        parentChatSeq: null,
+        parentChat: null,
+        taskCardSeq: null,
+        deleted: false,
+        createDate: new Date().toISOString(),
+        readMembers: [memberSeq],
+        chatReactions: [],
+      };
+
+      setMessages(prev => [...prev, optimistic]);
+      ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
+      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+    } catch (e) {
+      // TODO: 에러 핸들링(토스트 등)
+    }
+  }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
+
+  const sendFileFromPicker = useCallback(async () => {
+    setPlusOpen(false);
+    const picked = await DocumentPicker.getDocumentAsync({ multiple: false });
+    if (picked.canceled) return;
+
+    try {
+      const file = picked.assets[0];
+      console.log('file', file);
+
+      const uploaded = await uploadFileToServer(file.file, 'F', 'chat',);
+
+      const sendMessage: ChatSendType = {
+        content: '', // 파일은 fileSeq로 식별
+        memberName,
+        chatRoomName: roomTitle,
+        chatRoomSeq,
+        chatType: 'F',
+        fileSeq: uploaded.fileSeq,
+      };
+
+      const optimistic: ChatMessage = {
+        chatSeq: Date.now() * -1,
+        chatRoomSeq,
+        chatRoomName: roomTitle,
+        memberSeq,
+        memberName,
+        profileColor: null,
+        chatType: 'F',
+        content: '',
+        emojiPath: null,
+        fileSeq: uploaded.fileSeq ?? null,
+        parentChatSeq: null,
+        parentChat: null,
+        taskCardSeq: null,
+        deleted: false,
+        createDate: new Date().toISOString(),
+        readMembers: [memberSeq],
+        chatReactions: [],
+      };
+
+      setMessages(prev => [...prev, optimistic]);
+      ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
+      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+    } catch (e) {
+      // TODO: 에러 핸들링
+    }
+  }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
+
+  const sendEmoji = useCallback(async (emojiPath: string) => {
+    setEmojiOpen(false);
+
+    const sendMessage: ChatSendType = {
+      content: '', // 이모지는 emojiPath로 렌더
+      memberName,
+      chatRoomName: roomTitle,
+      chatRoomSeq,
+      chatType: 'E',
+      emojiPath,
+    };
+
+    const optimistic: ChatMessage = {
+      chatSeq: Date.now() * -1,
+      chatRoomSeq,
+      chatRoomName: roomTitle,
+      memberSeq,
+      memberName,
+      profileColor: null,
+      chatType: 'E',
+      content: '',
+      emojiPath,
+      fileSeq: null,
+      fileName: null,
+      fileSize: null,
+      parentChatSeq: null,
+      parentChat: null,
+      taskCardSeq: null,
+      deleted: false,
+      createDate: new Date().toISOString(),
+      readMembers: [memberSeq],
+      chatReactions: [],
+    };
+
+    setMessages(prev => [...prev, optimistic]);
+    ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+  }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
 
   useFocusEffect(
     useCallback(() => {
@@ -117,6 +293,12 @@ export default function ChatRoomScreen() {
   }, [loadInitial]);
 
   const upsertNewMessage = useCallback((incoming: ChatMessage) => {
+    if (incoming.memberSeq === memberSeq) {
+      incoming.readMembers = [...(incoming.readMembers ?? []), memberSeq];
+    } else {
+      incoming.readMembers = [...(incoming.readMembers ?? []), ...[memberSeq, incoming.memberSeq]];
+    }
+
     incoming.memberName = MemberService.getMemberName(incoming.memberSeq);
     ChatSocketService.sendReadMessage(memberSeq, chatRoomSeq, incoming.chatSeq);
     setMessages((prev) => {
@@ -146,12 +328,14 @@ export default function ChatRoomScreen() {
       readSubRef.current = null;
 
       // 채팅 읽음 처리 구독
-      const readSub = mgr.subscribe(`/topic/readRoom/${chatRoomSeq}`, (frame) => {
+      const readSub = mgr.subscribe(`/topic/joinRoom/${chatRoomSeq}`, (frame) => {
         if (canceled) return;
         const body: ChatMessage = JSON.parse(frame.body);
+
+        const readMessage = messages.find(m => m.chatSeq === body.chatSeq)
+        if (!readMessage) return;
         setMessages(prev =>
           prev.map(m => {
-            if (m.chatSeq !== body.chatSeq) return m;
             if (m.readMembers?.includes(body.memberSeq)) return m;
             return { ...m, readMembers: [...(m.readMembers ?? []), body.memberSeq] };
           })
@@ -250,6 +434,7 @@ export default function ChatRoomScreen() {
     [memberSeq]
   );
 
+  
   /* ----------------------------- 메시지 전송 ----------------------------- */
   const sendTextMessage = useCallback(async (message: string) => {
     const trimmed = message.trim();
@@ -288,7 +473,7 @@ export default function ChatRoomScreen() {
 
     setMessages(prev => [...prev, optimistic]);
     setInput('');
-    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
     setShowScrollToBottom(false); // 전송 후엔 하단으로 이동하므로 FAB 숨김
 
     try {
@@ -396,6 +581,16 @@ export default function ChatRoomScreen() {
           ]}
           onLayout={(e) => setInputBarH(e.nativeEvent.layout.height)}
         >
+          {/* ✅ + 버튼 */}
+          <TouchableOpacity
+            onPress={() => setPlusOpen(true)}
+            style={{ marginRight: 6, padding: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="더 많은 전송 옵션"
+          >
+            <Ionicons name="add" size={22} color={colors.primary} />
+          </TouchableOpacity>
+
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.text }]}
@@ -417,6 +612,25 @@ export default function ChatRoomScreen() {
             <Ionicons name="send" size={18} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
+
+        {/* ➕ 메뉴 시트 */}
+        <PlusMenuSheet
+          visible={plusOpen}
+          onClose={() => setPlusOpen(false)}
+          onPickImage={sendImageFromPicker}
+          onPickFile={sendFileFromPicker}
+          onOpenEmoji={() => {
+            setPlusOpen(false);
+            setEmojiOpen(true);
+          }}
+        />
+
+        {/* 😊 이모지 피커 */}
+        <EmojiPickerModal
+          visible={emojiOpen}
+          onClose={() => setEmojiOpen(false)}
+          onSelect={sendEmoji}
+        />
       </KeyboardAvoidingView>
     </View>
   );
