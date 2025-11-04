@@ -2,10 +2,11 @@ import ScheduleService, { Schedule } from '@/api/schedule/scheduleService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import dayjs from 'dayjs';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet } from 'react-native';
 
 interface TodayScheduleProps {
   // 필요한 경우 props 추가

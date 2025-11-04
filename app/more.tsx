@@ -82,8 +82,6 @@ export default function MoreScreen() {
     if (!userInfo?.member) return null;
 
     const { member } = userInfo;
-
-    
     
     return (
       <ThemedView style={dynamicStyles.profileContainer}>
@@ -108,6 +106,9 @@ export default function MoreScreen() {
               {member.position || '직책 정보 없음'}
             </ThemedText>
           </View>
+          <TouchableOpacity style={dynamicStyles.settingButton} onPress={() => router.push('/settings/settings')}>
+            <Ionicons name="settings-outline" size={24} color={colorScheme === 'dark' ? '#4a9eff' : '#007AFF'} />
+          </TouchableOpacity>
           <TouchableOpacity 
             style={dynamicStyles.logoutButton}
             onPress={handleLogout}
@@ -310,9 +311,25 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
   profileInfo: {
     flex: 1,
   },
+  settingButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: colorScheme === 'dark' ? '#2a2a2a' : '#f8f9fa',
+    shadowColor: colorScheme === 'dark' ? '#000' : '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: colorScheme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: colorScheme === 'dark' ? 1 : 0,
+    borderColor: colorScheme === 'dark' ? '#3a3a3a' : 'transparent',
+    marginRight: 8,
+  },
   logoutButton: {
-    padding: 12,
-    borderRadius: 12,
+    padding: 8,
+    borderRadius: 8,
     backgroundColor: colorScheme === 'dark' ? '#2a2a2a' : '#f8f9fa',
     shadowColor: colorScheme === 'dark' ? '#000' : '#000',
     shadowOffset: {

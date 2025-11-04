@@ -11,3 +11,5 @@ export const selectMemberProfileColor = (seq: number) => createSelector(
   [selectMemberList],
   (list) => list?.find(r => r.memberSeq === seq)?.profileColor ?? '#CCCCCC'
 );
+
+export const selectMyMemberSeq = (state: RootState) => state.auth.userInfo?.member?.memberSeq;

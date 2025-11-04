@@ -1,8 +1,10 @@
 // components/chat/ImageViewerModal.tsx
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   LayoutChangeEvent,
   Modal,
   Platform,
@@ -10,8 +12,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
-  View,
+  View
 } from 'react-native';
 import {
   Gesture,
@@ -53,6 +54,11 @@ export default function ImageViewerModal({
   const scheme = useColorScheme();
   const c = Colors[scheme ?? 'light'];
 
+  // 이미지 로딩/에러 상태 & 페이드인
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const imgOpacity = useSharedValue(0);
+
   // UI 톤
   const isDarkUI =
     background === 'auto' ? (scheme ?? 'light') === 'dark' : background === 'dark';
@@ -92,6 +98,10 @@ export default function ImageViewerModal({
       translateY.value = withTiming(0, { duration: 120 });
       savedTranslateX.value = 0;
       savedTranslateY.value = 0;
+
+      setIsLoading(true);
+      setHasError(false);
+      imgOpacity.value = 0;
     }
   }, [visible, uri, minScale]);
 
@@ -178,6 +188,7 @@ export default function ImageViewerModal({
       { translateY: translateY.value },
       { scale: scale.value },
     ],
+    opacity: imgOpacity.value,
   }));
 
   if (!uri) return null;
@@ -239,7 +250,37 @@ export default function ImageViewerModal({
                     source={{ uri }}
                     resizeMode="contain"
                     style={[styles.image, animatedImageStyle]}
+                    onLoadStart={() => {
+                      setHasError(false);
+                      setIsLoading(true);
+                      imgOpacity.value = 0;
+                    }}
+                    onLoad={() => {
+                      // no-op
+                    }}
+                    onLoadEnd={() => {
+                      setIsLoading(false);
+                      imgOpacity.value = withTiming(1, { duration: 180 });
+                    }}
+                    onError={() => {
+                      setIsLoading(false);
+                      setHasError(true);
+                    }}
                   />
+                  {/* 로딩 스피너 */}
+                  {isLoading && !hasError && (
+                    <View style={styles.loaderWrap} pointerEvents="none">
+                      <ActivityIndicator size="large" color={iconColor} />
+                    </View>
+                  )}
+                  {/* (선택) 에러 표시 */}
+                  {hasError && (
+                    <View style={styles.loaderWrap}>
+                      <Text style={[styles.errorText, { color: textColor }]}>
+                        이미지를 불러올 수 없어요.
+                      </Text>
+                    </View>
+                  )}
                 </Animated.View>
               </GestureDetector>
             </View>
@@ -290,4 +331,13 @@ const styles = StyleSheet.create({
   },
   // 실제 width/height는 animated style에서 지정
   image: {},
+  loaderWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    opacity: 0.9,
+  },
 });

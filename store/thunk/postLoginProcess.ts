@@ -61,7 +61,6 @@ export const postLoginProcess = createAsyncThunk(
       const state: any = getState();
       
       const token = state.auth.token;
-      console.log('token', token);
 
       const user = state.auth.userInfo;
       const memberSeq: number = user?.member?.memberSeq ?? 0;

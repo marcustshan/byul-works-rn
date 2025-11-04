@@ -6,21 +6,26 @@ import { ChatMessage } from './chat/chatService';
 
 // ⬇️ 추가된 import
 import { store } from '@/store';
+import { normalizeRnFile, RnFile } from '@/utils/fileNormalize';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 
-export interface FileUpload {
-  fileSeq?: number;
-  path?: string;
-  fileType?: string;
+export type FileUploadReq = {
+  file: RnFile;
   tableName: string;
-  tableSeq?: number;
-  file?: File;
-  originName?: string;
-  fileSize?: string;
+  fileType?: string;
+};
+
+export type FileUploadRes = {
+  fileSeq: number;
   fileName?: string;
-}
+  fileSize?: number;
+  path?: string;
+  tableName: string;
+  fileType?: string;
+  originName?: string;
+};
 
 function parseFilenameFromContentDisposition(v?: string | null): string | null {
   if (!v) return null;
@@ -38,15 +43,21 @@ function sanitizeFilename(name: string): string {
 }
 
 export class FileService {
-  static async uploadFile(file: FileUpload): Promise<FileUpload> {
-    const formData = new FormData();
-    formData.append('file', file.file);
-    formData.append('tableName', file.tableName);
-    formData.append('fileType', file.fileType ?? '');
-    const { data } = await api.post<FileUpload>('/file/upload', formData, {
+  static async uploadFile(req: { file: RnFile; tableName: string; fileType?: string }): Promise<FileUploadRes> {
+
+    const normalizedFile = await normalizeRnFile(req.file);
+
+    const form = new FormData();
+    form.append('file', normalizedFile as any); // RN: {uri,name,type}
+    form.append('tableName', req.tableName);
+    form.append('fileType', req.fileType ?? '');
+
+    const { data } = await api.post<FileUploadRes>('/file/upload', form, {
       headers: {
+        Accept: 'application/json',
         'Content-Type': 'multipart/form-data',
-      },
+      }, // Content-Type는 자동(boundary)
+      transformRequest: v => v,
     });
     return data;
   }

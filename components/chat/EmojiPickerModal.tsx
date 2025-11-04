@@ -1,8 +1,9 @@
 // components/chat/EmojiPickerModal.tsx
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { EmojiMapper } from '@/utils/emojiMapper';
 import React, { useMemo, useState } from 'react';
-import { FlatList, Image, Modal, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Props = {

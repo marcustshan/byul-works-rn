@@ -3,10 +3,11 @@ import { Schedule, ScheduleCode, ScheduleService } from '@/api/schedule/schedule
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ko';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, TouchableOpacity, useColorScheme, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 
 // ────────────────────────────────────────────────────────────────────────────────

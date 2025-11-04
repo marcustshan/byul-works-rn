@@ -73,8 +73,9 @@ export interface ChatSendType {
   chatRoomName: string;
   chatRoomSeq: number;
   fileSeq?: number;
-  chatType: 'M' | 'I' | 'F' | 'L'; // M: 메시지, I: 이미지, F: 파일, L: 링크
+  chatType: 'M' | 'I' | 'F' | 'L' | 'E'; // M: 메시지, I: 이미지, F: 파일, L: 링크, E: 이모티콘
   parentChat?: ChatMessage | null; // 답장인 경우 부모 메시지 전체 객체
+  emojiPath?: string | null; // 이모티콘 경로
 }
 
 // 채팅 메시지 페이지 요청 타입
@@ -252,6 +253,56 @@ export class ChatService {
       return data;
     } catch (error: any) {
       console.error('🔍 채팅 검색 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 채팅 리액션 목록을 조회합니다.
+   * @returns 채팅 리액션 목록
+   */
+  public static async getReactionList(): Promise<ChatReaction[]> {
+    try {
+      const { data } = await api.get<ChatReaction[]>(`/chat/reactions`);
+      return data;
+    } catch (error: any) {
+      console.error('👍 채팅 리액션 목록 조회 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 채팅 메시지에 리액션을 설정합니다.
+   * @param message 채팅 메시지
+   * @param reaction 리액션
+   * @returns 성공 여부
+   */
+  public static async setMessageReaction(message: ChatMessage, reaction: string): Promise<ChatReaction> {
+    try {
+      console.log('setMessageReaction', message.chatSeq, reaction);
+      const { data } = await api.post<ChatReaction>(`/chat/reactions`, {
+        chatSeq: message.chatSeq,
+        reaction: reaction
+      });
+
+      return data;
+    } catch (error: any) {
+      console.error('👍 채팅 리액션 설정 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 채팅 메시지에 리액션을 삭제합니다.
+   * @param chatSeq 채팅 메시지 시퀀스
+   * @returns 성공 여부
+   */
+  public static async deleteMessageReaction(chatSeq: number): Promise<ChatReaction> {
+    try {
+      const { data } = await api.delete<ChatReaction>(`/chat/reactions/${chatSeq}`);
+      return data;
+    } catch (error: any) {
+      console.error('👍 채팅 리액션 삭제 실패:', error);
       throw error;
     }
   }

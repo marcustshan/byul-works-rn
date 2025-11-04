@@ -58,7 +58,7 @@ export default function Footer() {
       icon: 'ellipsis-horizontal-outline',
       activeIcon: 'ellipsis-horizontal',
       route: '/more',
-      matchers: ['/more', /^\/more(\/|$)/],
+      matchers: ['/more', /^\/more(\/|$)/, '/settings'],
     },
   ];
 

@@ -2,6 +2,7 @@ import WorkOnOffService, { WeeklyWorkOnOffResponse, WorkType, workTypes } from '
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { formatDisplayDate, getWeekdayLabel } from '@/utils/commonUtil';
 import dayjs, { Dayjs } from 'dayjs';
 import { useRouter /*, useFocusEffect*/ } from 'expo-router';
@@ -13,7 +14,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from 'react-native';
 
 const fmtDisplayDate = (date: Dayjs) => formatDisplayDate(date, { locale: 'ko', style: 'short' });
@@ -395,8 +395,8 @@ const makeStyles = (_C: any) =>
     },
     navButtonText: { fontSize: 14, fontWeight: '600' },
     dateContainer: { flex: 1, alignItems: 'center' },
-    dateText: { fontSize: 14, fontWeight: 'bold' },
-    weekRangeText: { fontSize: 12, marginTop: 4 },
+    dateText: { fontSize: 16, fontWeight: 'bold' },
+    weekRangeText: { fontSize: 14, marginTop: 4 },
     loadingContainer: { padding: 20, alignItems: 'center' },
     loadingText: { marginTop: 10, fontSize: 14 },
     recordsSection: { marginTop: 0, paddingHorizontal: 0 },

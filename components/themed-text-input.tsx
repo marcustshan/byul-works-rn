@@ -1,14 +1,14 @@
 import { ThemedText } from '@/components/themed-text';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import React, { forwardRef, useMemo, useState } from 'react';
 import {
-    Pressable,
-    StyleSheet,
-    TextInput,
-    TextInputProps,
-    TextStyle,
-    useColorScheme,
-    View,
-    ViewStyle,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  TextInputProps,
+  TextStyle,
+  View,
+  ViewStyle,
 } from 'react-native';
 
 type Size = 'sm' | 'md' | 'lg';

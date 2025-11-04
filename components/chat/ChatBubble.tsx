@@ -1,14 +1,15 @@
 // components/chat/ChatBubble.tsx
-import type { ChatMessage, ChatRoom } from '@/api/chat/chatService';
+import { ChatService, type ChatMessage, type ChatReaction, type ChatRoom } from '@/api/chat/chatService';
 import { getCurrentApiConfig } from '@/constants/environment';
 import { Colors } from '@/constants/theme';
-import { selectMemberBySeq, selectMemberList, selectMemberProfileColor } from '@/selectors/member/memberSelectors';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { selectMemberBySeq, selectMemberList, selectMemberProfileColor, selectMyMemberSeq } from '@/selectors/member/memberSelectors';
 import { store } from '@/store';
 import { encodeBase64, getWeekdayLabel } from '@/utils/commonUtil';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
 import * as Clipboard from 'expo-clipboard';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -19,7 +20,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  useColorScheme,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,7 +28,10 @@ import FullMessageModal from './FullMessageModal';
 import ImageViewerModal from './ImageViewerModal';
 
 import { FileService } from '@/api/fileService';
+import { MemberService } from '@/api/memberService';
+import { useAppSelector } from '@/store/hooks';
 import { EmojiMapper } from '@/utils/emojiMapper';
+import { Toast } from '../common/Toast';
 
 
 type Props = {
@@ -46,12 +49,42 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   const [showContentModal, setShowContentModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
 
+  const myMemberSeq = useAppSelector(selectMyMemberSeq);
+
   const [menuOpen, setMenuOpen] = useState(false);
-  const openContextMenu = (message: string) => {
-    setPressedMessage(message);
+  const openContextMenu = (message: ChatMessage) => {
+    const senderName = MemberService.getMemberName(message.memberSeq);
+    switch (message.chatType) {
+      case 'M':
+        setPressedMessage(`${senderName} : ${message.content}`);
+        break;
+      case 'I':
+        setPressedMessage(`${senderName} : ${message.fileName ?? ''}`);
+        break;
+      case 'E':
+        setPressedMessage(`${senderName} : ${message.content ?? ''}`);
+        break;
+      case 'F':
+        setPressedMessage(`${senderName} : ${message.fileName ?? ''}`);
+        break;
+      case 'L':
+        setPressedMessage(`${senderName} : ${message.content ?? ''}`);
+        break;
+    }
     setMenuOpen(true);
   };
   const [pressedMessage, setPressedMessage] = useState<string | null>(null);
+
+  // 리액션 관련 state
+  const [showReactionModal, setShowReactionModal] = useState(false);
+  const [activeReactionKey, setActiveReactionKey] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<ChatReaction[]>(message.chatReactions ?? []);
+
+  // message가 바뀌면 동기화 (메시지 교체/갱신 시 반영)
+  useEffect(() => {
+    setReactions(message.chatReactions ?? []);
+  }, [message.chatSeq, message.chatReactions]);
+
 
   // (추가) 길이 판단 유틸 — 너무 정교할 필요 없이 글자수 기준
   const plainText = stripHtmlMentions(message.content ?? '');
@@ -80,8 +113,11 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   }
 
   const handleReply = (msg: ChatMessage) => {
-    // 화면 단(예: ChatRoomScreen)에서 reply UI를 띄우도록 콜백을 끌어올리는 것도 추천
-    // props.onReply?.(msg);
+    // TODO - 채팅 답장 기능 구현
+    Toast.show({
+      message: '답장 기능은 추후 추가 예정입니다.',
+      type: 'info',
+    });
   };
   
   const handleCopy = async (text: string) => {
@@ -89,7 +125,11 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   };
   
   const handleShare = (payload: { message?: string; url?: string }) => {
-    // 필요 시 커스텀 공유 로직으로 대체 가능 (기본은 ChatContextMenu 내에서 Share.share 호출)
+    // TODO - 채팅 공유 기능 구현
+    Toast.show({
+      message: '공유 기능은 추후 추가 예정입니다.',
+      type: 'info',
+    });
   };
 
   const renderContent = () => {
@@ -99,7 +139,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         const encodedFileSeq = encodeBase64(message.fileSeq?.toString() ?? '');
         return (
           <>
-            <Pressable onLongPress={() => openContextMenu(message.fileName ?? '')} onPress={() => setShowImageViewer(true)}>
+            <Pressable onLongPress={() => openContextMenu(message)} onPress={() => setShowImageViewer(true)}>
               <Image
                 source={{ uri: `${API_BASE_URL}/file/preview/${encodedFileSeq}` }}
                 style={styles.image}
@@ -124,22 +164,29 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         );
       case 'F':
         return (
-          <TouchableOpacity onLongPress={() => openContextMenu(message.fileName ?? '')} onPress={() => { downloadFile(message) }}>
-            <Text style={[styles.file, { color: c.text }]} numberOfLines={2}>
-              📎 {message.fileName ?? message.content}
-            </Text>
-            <Text style={[styles.hint, { color: c.textDim }]}>크기 : {message.fileSize ?? '0'}</Text>
+          <TouchableOpacity onLongPress={() => openContextMenu(message)} onPress={() => { downloadFile(message) }}>
+            <View style={styles.fileWrap}>
+              <View style={styles.fileIcon}>
+                <Ionicons name="document-text" size={16} color={c.text} />
+              </View>
+              <View style={styles.fileContent}>
+                <Text style={[styles.file, { color: c.text }]} numberOfLines={2}>
+                  {message.fileName ?? message.content}
+                </Text>
+                <Text style={[styles.hint, { color: c.textDim }]}>크기 : {message.fileSize ?? '0'}</Text>
+              </View>
+            </View>
           </TouchableOpacity>
         );
       case 'L':
         return (
-          <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message.content)} onPress={() => Linking.openURL(message.content)}>
+          <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message)} onPress={() => Linking.openURL(message.content)}>
             {message.content}
           </Text>
         );
       default:
         return (
-          <Pressable onLongPress={() => openContextMenu(plainText)}>
+          <Pressable onLongPress={() => openContextMenu(message)}>
             <Text
               style={[styles.text, { color: c.text }]}
               numberOfLines={isLong ? 6 : undefined} // 미리보기는 6줄로 제한
@@ -157,6 +204,51 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   };
 
   const readMeta = getReadMeta(chatRoom, message);
+
+  const reactionAgg = useMemo(() => {
+    const map = new Map<
+      string,
+      { key: string; label: string; members: number[] }
+    >();
+
+    (reactions ?? []).forEach((r: ChatReaction) => {
+      // key는 서버 스키마에 맞게 reactionCode/emoji 등 fallback
+      const key = r.chatReactionSeq.toString();
+
+      const label = r.reaction;
+
+      const memberSeq: number = r.memberSeq;
+
+      if (!map.has(key)) {
+        map.set(key, { key, label, members: [] });
+      }
+      map.get(key)!.members.push(memberSeq);
+    });
+
+    const list = Array.from(map.values()).sort(
+      (a, b) => b.members.length - a.members.length
+    );
+
+    return {
+      list,
+      hasAny: list.length > 0,
+      defaultKey: list[0]?.key ?? null,
+    };
+  }, [reactions, myMemberSeq]);
+
+  // 리액션 선택 핸들러
+  const handleSelectReaction = async (message: ChatMessage, reaction: string) => {
+    const result = await ChatService.setMessageReaction(message, reaction);
+    setReactions(prev => [...prev, result]);
+    setShowReactionModal(false);
+  };
+
+  // 리액션 삭제 핸들러
+  const handleDeleteReaction = async (chatSeq: number) => {
+    const result = await ChatService.deleteMessageReaction(chatSeq);
+    setReactions(prev => prev?.filter(r => r.chatReactionSeq !== result.chatReactionSeq) ?? []);
+    setShowReactionModal(false);
+  };
 
   // 모달에서 표시할 사용자 목록
   const lists = useMemo(() => {
@@ -213,6 +305,24 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
             <Text style={[styles.readBadgeText, { color: c.textDim }]}>{ readMeta.count ?? 0}</Text>
           </Pressable>
         )}
+
+        {reactionAgg.hasAny && (
+          <Pressable
+            onPress={() => {
+              setActiveReactionKey(activeReactionKey ?? reactionAgg.defaultKey);
+              setShowReactionModal(true);
+            }}
+          >
+            <View style={[styles.rxRow, { borderColor: c.border, backgroundColor: c.chat.chipBg }]}>
+              {reactionAgg.list.map((rx) => (
+                <View key={rx.key} style={[styles.rxPill, { backgroundColor: c.surface, borderColor: c.border }]}>
+                  <Text style={[styles.rxLabel, { color: c.text }]}>{rx.label}</Text>
+                  <Text style={[styles.rxCount, { color: c.textDim }]}>{rx.members.length}</Text>
+                </View>
+              ))}
+            </View>
+          </Pressable>
+        )}
       </View>
 
       <ChatContextMenu
@@ -222,6 +332,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         onReply={handleReply}
         onCopy={handleCopy}
         onShare={handleShare}
+        onSelectReaction={handleSelectReaction}
         title={pressedMessage ?? '메시지'}
       />
 
@@ -272,7 +383,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
               )}
             </View>
 
-            <View style={styles.readSection}>
+            <View style={styles.unreadSection}>
               <View style={styles.readSectionHeader}>
                 <Ionicons name="time" size={14} color={c.textDim} />
                 <Text style={[styles.readSectionTitle, { color: c.textDim }]}>안 읽음 ({lists.unreadList.length})</Text>
@@ -301,6 +412,108 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* ─────────────────────────────────────────────
+          리액션 상세 모달: 탭(리액션) + 사용자 목록
+        ───────────────────────────────────────────── */}
+      <Modal
+        visible={showReactionModal}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        hardwareAccelerated
+        presentationStyle="overFullScreen"
+        onRequestClose={() => setShowReactionModal(false)}
+      >
+        <View style={styles.readModalOverlay}>
+          <Pressable style={styles.readOverlayTouch} onPress={() => setShowReactionModal(false)} />
+          <View
+            style={[
+              styles.readSheet,
+              {
+                backgroundColor: c.chat.sheetBg,
+                borderColor: c.border,
+                paddingBottom: Math.max(12, insets.bottom + 12),
+              },
+            ]}
+          >
+            <View style={[styles.readSheetHandle, { backgroundColor: c.chat.sheetHandle }]} />
+            <Text style={[styles.readSheetTitle, { color: c.text }]}>리액션</Text>
+
+            {/* 탭: 리액션 가로 스크롤 */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginBottom: 8 }}
+              contentContainerStyle={{ paddingHorizontal: 2 }}
+            >
+              {reactionAgg.list.map((rx) => {
+                const isActive = rx.key === activeReactionKey;
+                return (
+                  <Pressable
+                    key={rx.key}
+                    onPress={() => setActiveReactionKey(rx.key)}
+                    style={[
+                      styles.rxTab,
+                      {
+                        backgroundColor: isActive ? c.surface : c.chat.chipBg,
+                        borderColor: isActive ? c.tint : c.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.rxTabLabel, { color: isActive ? c.tint : c.text }]}>{rx.label}</Text>
+                    <Text style={[styles.rxTabCount, { color: isActive ? c.tint : c.textDim }]}>
+                      {rx.members.length}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* 선택된 탭의 사용자 목록 */}
+            {(() => {
+              const current = reactionAgg.list.find((r) => r.key === activeReactionKey)
+                ?? (reactionAgg.defaultKey ? reactionAgg.list[0] : null);
+
+              if (!current || current.members.length === 0) {
+                return <Text style={[styles.readEmptyText, { color: c.textDim }]}>아직 아무도 누르지 않았어요.</Text>;
+              }
+
+              return (
+                <ScrollView style={{ maxHeight: 260 }}>
+                  <View style={styles.readChips}>
+                    {current.members.map((seq) => (
+                      <View key={seq} style={[styles.readChip, { backgroundColor: c.chat.chipBg }]}>
+                        <View style={[styles.readChipDot, { backgroundColor: getMemberProfileColor(seq) }]} />
+                        <Text style={[styles.readChipText, { color: c.text }]} numberOfLines={1}>
+                          {getMemberName(seq)}
+                        </Text>
+                        {seq === myMemberSeq && (
+                          <Pressable
+                            onPress={() => handleDeleteReaction(message.chatSeq)}
+                            hitSlop={8}
+                            style={styles.rxDeleteXBtn}
+                          >
+                            <Ionicons name="close-circle" size={14} color={c.textDim} />
+                          </Pressable>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              );
+            })()}
+
+            <Pressable
+              onPress={() => setShowReactionModal(false)}
+              style={[styles.readCloseBtn, { borderColor: c.border }]}
+            >
+              <Text style={[styles.readCloseBtnText, { color: c.text }]}>닫기</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -344,6 +557,7 @@ const styles = StyleSheet.create({
   senderProfileCircle: { width: 14, height: 14, borderRadius: 10, marginBottom: 2 },
   sender: { fontSize: 14, marginBottom: 4, fontWeight: '600' },
   bubble: {
+    maxWidth: '80%',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 16,
@@ -354,6 +568,10 @@ const styles = StyleSheet.create({
   emojiImage: { width: 120, height: 120, resizeMode: 'contain' },
   file: { fontSize: 14, fontWeight: '600' },
   hint: { fontSize: 12, marginTop: 2 },
+
+  fileWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  fileIcon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  fileContent: { textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '80%' },
 
   /** 메타 영역 */
   metaRow: {
@@ -368,8 +586,8 @@ const styles = StyleSheet.create({
   readBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
   },
   readBadgeText: {
@@ -403,6 +621,7 @@ const styles = StyleSheet.create({
   readSheetTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
 
   readSection: { marginTop: 6 },
+  unreadSection: { marginTop: 16 },
   readSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   readSectionTitle: { fontSize: 12, fontWeight: '600' },
   readEmptyText: { fontSize: 12 },
@@ -427,4 +646,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   readCloseBtnText: { fontSize: 14, fontWeight: '600' },
+
+  // 리액션 요약(버블 아래 줄)
+  rxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  rxPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  rxLabel: { fontSize: 10, includeFontPadding: false },
+  rxCount: { fontSize: 10, includeFontPadding: false },
+
+  // 탭 스타일
+  rxTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginRight: 8,
+  },
+  rxTabLabel: { fontSize: 18, fontWeight: '600' },
+  rxTabCount: { fontSize: 14, marginLeft: 6 },
+  rxDeleteXBtn: {
+    marginLeft: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
 });

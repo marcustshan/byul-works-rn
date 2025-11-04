@@ -1,17 +1,21 @@
 // components/chat/ChatContextMenu.tsx
-import type { ChatMessage } from '@/api/chat/chatService';
+import { ChatReaction, ChatService, type ChatMessage } from '@/api/chat/chatService';
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { selectChatReactionList } from '@/selectors/chat/chatSelectors';
+import { setChatReactionList } from '@/store/chatReactionSlice';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
+  FlatList,
   Modal,
   Platform,
   Pressable,
   Share,
   StyleSheet,
   Text,
-  useColorScheme,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -26,6 +30,9 @@ export type ChatContextMenuProps = {
   onReply: (message: ChatMessage) => void;
   onCopy: (text: string) => void;
   onShare?: (payload: { message?: string; url?: string }) => void;
+
+  /** 리액션 선택 시 콜백(선택) — 없으면 기본적으로 ChatService 호출 */
+  onSelectReaction?: (message: ChatMessage, reaction: ChatReaction) => void;
 
   /** 메뉴 타이틀 (선택) */
   title?: string;
@@ -45,10 +52,29 @@ export default function ChatContextMenu({
   onReply,
   onCopy,
   onShare,
+  onSelectReaction,
   title = '메시지',
 }: ChatContextMenuProps) {
   const scheme = useColorScheme();
   const c = Colors[scheme ?? 'light'];
+
+  const dispatch = useAppDispatch();
+  const reactionList = useAppSelector(selectChatReactionList);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (reactionList && reactionList.length > 0) return; // ✅ 이미 있으면 skip
+  
+    let canceled = false;
+    (async () => {
+      try {
+        const data = await ChatService.getReactionList();
+        if (!canceled) dispatch(setChatReactionList(data));
+      } catch {}
+    })();
+  
+    return () => { canceled = true; };
+  }, [visible]); // ⚠️ reactionList를 deps에서 뺌 → 최초 1회만 시도
 
   const payload = useMemo(() => {
     // 공유/복사 기본 재료 구성
@@ -83,6 +109,22 @@ export default function ChatContextMenu({
     }
   };
 
+  // ─────────────────────────────────────────────────────────
+  // 리액션 선택 핸들러 (단일 선택 → 즉시 적용 후 닫기)
+  // ─────────────────────────────────────────────────────────
+  const handleSelectReaction = useCallback(
+    async (reaction: ChatReaction) => {
+      onClose();
+
+      // 사용자 콜백이 있으면 그것만 호출
+      if (onSelectReaction) {
+        setTimeout(() => onSelectReaction(message, reaction), 0);
+        return;
+      }
+    },
+    [message, onClose, onSelectReaction]
+  );
+
   const items = [
     {
       key: 'reply',
@@ -106,6 +148,27 @@ export default function ChatContextMenu({
     },
   ];
 
+  // 리액션 표시용 렌더러
+  const renderReaction = useCallback(
+    ({ item }: { item: ChatReaction }) => {
+      return (
+        <Pressable
+          onPress={() => handleSelectReaction(item)}
+          style={({ pressed }) => [
+            styles.reactionPill,
+            { backgroundColor: pressed ? c.surfaceMuted : c.surface },
+            { borderColor: c.border },
+          ]}
+        >
+          <Text style={[styles.reactionEmoji, { color: c.text }]} numberOfLines={1}>
+            {item}
+          </Text>
+        </Pressable>
+      );
+    },
+    [c.border, c.surface, c.surfaceMuted, c.text, handleSelectReaction]
+  );
+
   return (
     <Modal
       visible={visible}
@@ -127,6 +190,29 @@ export default function ChatContextMenu({
             ]}
           >
             <Text style={[styles.title, { color: c.textDim }]}>{title}</Text>
+
+            {/* ──────────────────────────────────────────────
+                리액션 가로 리스트 (단일 선택)
+               ────────────────────────────────────────────── */}
+            {!!reactionList?.length && (
+              <View
+              style={[
+                styles.reactionRowWrap,
+                { backgroundColor: c.surface, borderColor: c.border },
+              ]}
+              >
+                <FlatList
+                  horizontal
+                  data={reactionList}
+                  keyExtractor={(item, idx) =>
+                    String((item as any).code ?? (item as any).reactionCode ?? (item as any).id ?? idx)
+                  }
+                  renderItem={renderReaction}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.reactionRow}
+                />
+              </View>
+            )}
 
             <View style={styles.list}>
               {items.map((it) => (
@@ -174,6 +260,8 @@ export default function ChatContextMenu({
   );
 }
 
+const PILL_SIZE = 40;
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -197,6 +285,37 @@ const styles = StyleSheet.create({
     textOverflow: 'ellipsis',
     overflow: 'hidden',
   },
+
+  // ── Reactions Row ──────────────────────────────────────
+  reactionRowWrap: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    marginBottom: 10,
+  },
+  reactionRow: {
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  reactionPill: {
+    width: PILL_SIZE,
+    height: PILL_SIZE,
+    borderRadius: PILL_SIZE / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  reactionEmoji: {
+    fontSize: 22,
+    includeFontPadding: false,
+  },
+  reactionImg: {
+    width: 22,
+    height: 22,
+  },
+
+  // ── Menu Items ─────────────────────────────────────────
   list: {
     borderRadius: 12,
     overflow: 'hidden',

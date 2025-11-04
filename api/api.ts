@@ -11,9 +11,6 @@ const BASE_URL = getCurrentApiConfig().BASE_URL;
 const api: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 15_000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // --- 공통 에러 타입(예시) ---
@@ -58,6 +55,7 @@ api.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
     return config;
   },
   (error: any) => Promise.reject(error)

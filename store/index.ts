@@ -1,6 +1,7 @@
 // store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
+import chatReactionReducer from './chatReactionSlice';
 import chatRoomReducer from './chatRoomSlice';
 import memberReducer from './memberSlice';
 import menuReducer from './menuSlice';
@@ -14,6 +15,7 @@ export const store = configureStore({
     member: memberReducer,
     menu: menuReducer,
     chatRoom: chatRoomReducer,
+    chatReaction: chatReactionReducer,
     notification: notificationReducer,
   },
   // middleware, devTools, preloadedState 등 필요시 추가

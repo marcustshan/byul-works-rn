@@ -1,3 +1,4 @@
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import Checkbox from 'expo-checkbox';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
@@ -10,7 +11,6 @@ import {
   Pressable,
   StyleSheet,
   TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
 

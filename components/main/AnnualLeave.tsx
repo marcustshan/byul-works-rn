@@ -2,10 +2,11 @@ import WorkOnOffService, { AnnualLeave, PersonalScheduleList } from '@/api/workO
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAppSelector } from '@/store/hooks';
 import { getWeekdayLabel } from '@/utils/commonUtil';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function AnnualLeaveComponent() {
   const { userInfo } = useAppSelector((state) => state.auth);

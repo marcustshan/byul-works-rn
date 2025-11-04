@@ -1,5 +1,6 @@
 // components/chat/FullMessageModal.tsx
 import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import React, { useState } from 'react';
@@ -10,7 +11,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useColorScheme,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

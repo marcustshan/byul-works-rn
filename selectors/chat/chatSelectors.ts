@@ -15,3 +15,5 @@ export const selectTotalUnread = createSelector(
 );
 
 export const selectCurrentChatRoomSeq = (s: RootState) => s.chatRoom.currentChatRoomSeq;
+
+export const selectChatReactionList = (s: RootState) => s.chatReaction.chatReactionList;

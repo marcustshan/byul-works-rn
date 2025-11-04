@@ -15,12 +15,12 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 
-import ChatService, { ChatMessage, ChatPageRequest, ChatSendType } from '@/api/chat/chatService';
+import ChatService, { ChatMessage, ChatPageRequest, ChatReaction, ChatSendType } from '@/api/chat/chatService';
 import { ChatSocketService } from '@/api/chat/chatSocketService';
-import { FileService, FileUpload } from '@/api/fileService';
+import { FileService, FileUploadRes } from '@/api/fileService';
 import { MemberService } from '@/api/memberService';
 import ChatBubble from '@/components/chat/ChatBubble';
 import ChatRoomHeader from '@/components/chat/ChatRoomHeader';
@@ -34,6 +34,7 @@ import { stompManager } from '@/socket/stompClient';
 import type { UserInfo } from '@/store/authSlice';
 import { clearActiveChatRoomSeq, clearChatRoomUnread, setActiveChatRoomSeq, updateChatRoom } from '@/store/chatRoomSlice';
 import { useAppSelector } from '@/store/hooks';
+import { toRnFileFromPickerAsset } from '@/utils/fileNormalize';
 
 export default function ChatRoomScreen() {
   const dispatch = useAppDispatch();
@@ -78,108 +79,76 @@ export default function ChatRoomScreen() {
 
   // 소켓 구독 참조
   const roomSubRef = useRef<{ unsubscribe: () => void } | null>(null);
-  const readSubRef = useRef<{ unsubscribe: () => void } | null>(null);  // ------ 업로드 API 연동 (서버 스펙에 맞게 구현) ------
+  const readSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const reactionSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const reactionDeleteSubRef = useRef<{ unsubscribe: () => void } | null>(null);
 
-  // ------ 업로드 API 연동 (서버 스펙에 맞게 구현) ------
+  // 첨부파일 종류: 이미지, 파일
+  type AttachmentKind = 'image' | 'file';
+
+  // ------ 업로드 API 연동 ------
   async function uploadFileToServer(
-    file: File, 
-    fileType: string,
-    tableName: string,
-  ): Promise<FileUpload> {
-    try {
-      const uploaded = await FileService.uploadFile({
-        fileType: fileType,
-        tableName: tableName,
-        file, 
-      });
-      return uploaded;
-    } catch (e) {
-      console.error('file upload failed', e);
-      throw e;
-    }
+    rnFile: { uri: string; name: string; type: string },
+    kind: AttachmentKind
+  ): Promise<FileUploadRes> {
+    const chatType = kind === 'image' ? 'I' : 'F';
+    return await FileService.uploadFile({ file: rnFile, fileType: chatType, tableName: 'chat' });
   }
 
   // ------ 전송 도우미 ------
-  const sendImageFromPicker = useCallback(async () => {
+  const sendAttachment = useCallback(async (kind: AttachmentKind) => {
     setPlusOpen(false);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
-    if (picked.canceled) return;
-
-    try {
-      const asset = picked.assets[0];
-      const fileName = asset.fileName || `image_${Date.now()}.jpg`;
-      const mime = asset.type === 'image' ? 'image/jpeg' : undefined;
-
-      const uploaded = await uploadFileToServer(asset.file, 'I', 'chat',);
-
-      // 서버가 fileSeq를 주면 이미지 메시지 전송
-      const sendMessage: ChatSendType = {
-        content: '', // 이미지 컨텐츠는 서버에서 fileSeq로 식별
-        memberName,
-        chatRoomName: roomTitle,
-        chatRoomSeq,
-        chatType: 'I',
-        fileSeq: uploaded.fileSeq,
-        fileName: uploaded.fileName,
-        fileSize: uploaded.fileSize ?? null,
-      };
-
-      // 낙관적 메세지
-      const optimistic: ChatMessage = {
-        chatSeq: Date.now() * -1,
-        chatRoomSeq,
-        chatRoomName: roomTitle,
-        memberSeq,
-        memberName,
-        profileColor: null,
-        chatType: 'I',
-        content: '',               // 미리보기는 ChatBubble에서 fileSeq 기반으로 처리
-        emojiPath: null,
-        fileSeq: uploaded.fileSeq, // ★ 미리 fileSeq를 할당해야 미리보기 가능
-        fileName: uploaded.fileName,
-        fileSize: uploaded.fileSize ?? null,
-        parentChatSeq: null,
-        parentChat: null,
-        taskCardSeq: null,
-        deleted: false,
-        createDate: new Date().toISOString(),
-        readMembers: [memberSeq],
-        chatReactions: [],
-      };
-
-      setMessages(prev => [...prev, optimistic]);
-      ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
-      requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
-    } catch (e) {
-      // TODO: 에러 핸들링(토스트 등)
+  
+    // 파일 선택(이미지, 파일)
+    let asset:
+      | { uri: string; name?: string; fileName?: string; mimeType?: string; type?: string }
+      | null = null;
+  
+    if (kind === 'image') {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+      if (picked.canceled) return;
+      asset = picked.assets[0];
+    } else {
+      const picked = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+      if (picked.canceled) return;
+      asset = picked.assets[0]; // { uri, name, mimeType }
     }
-  }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
-
-  const sendFileFromPicker = useCallback(async () => {
-    setPlusOpen(false);
-    const picked = await DocumentPicker.getDocumentAsync({ multiple: false });
-    if (picked.canceled) return;
-
+  
     try {
-      const file = picked.assets[0];
-      console.log('file', file);
+      // RN 파일 정규화
+      const rnFile = await toRnFileFromPickerAsset(asset!);
+  
+      // (선택) 파일 크기 추출
+      let fileSize: number | null = null;
+      try {
+        const stat = await FileSystem.getInfoAsync(rnFile.uri);
+        fileSize = typeof stat.size === 'number' ? stat.size : null;
+      } catch {}
 
-      const uploaded = await uploadFileToServer(file.file, 'F', 'chat',);
-
+      // 업로드
+      const uploaded = await uploadFileToServer(rnFile, kind);
+      const chatType = kind === 'image' ? 'I' : 'F';
+  
+      // 서버 전송 payload
       const sendMessage: ChatSendType = {
-        content: '', // 파일은 fileSeq로 식별
+        content: '',
         memberName,
         chatRoomName: roomTitle,
         chatRoomSeq,
-        chatType: 'F',
+        chatType, // 'I' | 'F'
         fileSeq: uploaded.fileSeq,
       };
-
+  
+      // 낙관적 메시지
       const optimistic: ChatMessage = {
         chatSeq: Date.now() * -1,
         chatRoomSeq,
@@ -187,10 +156,12 @@ export default function ChatRoomScreen() {
         memberSeq,
         memberName,
         profileColor: null,
-        chatType: 'F',
+        chatType,
         content: '',
         emojiPath: null,
         fileSeq: uploaded.fileSeq ?? null,
+        fileName: uploaded.fileName ?? rnFile.name,
+        fileSize: uploaded.fileSize ?? fileSize,
         parentChatSeq: null,
         parentChat: null,
         taskCardSeq: null,
@@ -199,14 +170,16 @@ export default function ChatRoomScreen() {
         readMembers: [memberSeq],
         chatReactions: [],
       };
-
+  
       setMessages(prev => [...prev, optimistic]);
       ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
       requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
     } catch (e) {
-      // TODO: 에러 핸들링
+      // TODO: 토스트/알럿
+      console.error('attachment failed', e);
     }
   }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
+  
 
   const sendEmoji = useCallback(async (emojiPath: string) => {
     setEmojiOpen(false);
@@ -324,8 +297,10 @@ export default function ChatRoomScreen() {
       // 기존 구독 정리(중복 구독 방지)
       roomSubRef.current?.unsubscribe?.();
       readSubRef.current?.unsubscribe?.();
+      reactionSubRef.current?.unsubscribe?.();
       roomSubRef.current = null;
       readSubRef.current = null;
+      reactionSubRef.current = null;
 
       // 채팅 읽음 처리 구독
       const readSub = mgr.subscribe(`/topic/joinRoom/${chatRoomSeq}`, (frame) => {
@@ -348,6 +323,21 @@ export default function ChatRoomScreen() {
           memberSeq: body.memberSeq,
           incUnread: false,
         }));
+      });
+
+      // 채팅 리액션 구독
+      const reactionSub = mgr.subscribe(`/topic/create/reaction`, (frame) => {
+        if (canceled) return;
+        const body: ChatReaction = JSON.parse(frame.body);
+        console.log('reactionSub', body);
+        setMessages(prev => prev.map(m => m.chatSeq === body.chatSeq ? { ...m, chatReactions: [...(m.chatReactions ?? []), body] } : m));
+      });
+      // 채팅 리액션 삭제 구독
+      const reactionDeleteSub = mgr.subscribe(`/topic/remove/reaction`, (frame) => {
+        if (canceled) return;
+        const body: ChatReaction = JSON.parse(frame.body);
+        console.log('reactionDeleteSub', body);
+        setMessages(prev => prev.map(m => m.chatSeq === body.chatSeq ? { ...m, chatReactions: (m.chatReactions ?? []).filter(r => r.chatReactionSeq !== body.chatReactionSeq) } : m));
       });
 
       // 채팅 메시지 구독
@@ -375,16 +365,23 @@ export default function ChatRoomScreen() {
 
       roomSubRef.current = sub;
       readSubRef.current = readSub;
+      reactionSubRef.current = reactionSub;
+      reactionDeleteSubRef.current = reactionDeleteSub;
     }
 
     connectAndSubscribe();
 
     return () => {
+      console.log('채팅방 구독 모두 해제');
       canceled = true;
       roomSubRef.current?.unsubscribe?.();
       roomSubRef.current = null;
       readSubRef.current?.unsubscribe?.();
       readSubRef.current = null;
+      reactionSubRef.current?.unsubscribe?.();
+      reactionSubRef.current = null;
+      reactionDeleteSubRef.current?.unsubscribe?.();
+      reactionDeleteSubRef.current = null;
     };
     // ⬇️ socket 연결 상태 플래그가 있다면 여기에 함께 의존시키면 재연결 시 자동 재구독됩니다.
   }, [chatRoomSeq, upsertNewMessage /* , connected */]);
@@ -617,8 +614,8 @@ export default function ChatRoomScreen() {
         <PlusMenuSheet
           visible={plusOpen}
           onClose={() => setPlusOpen(false)}
-          onPickImage={sendImageFromPicker}
-          onPickFile={sendFileFromPicker}
+          onPickImage={() => sendAttachment('image')}
+          onPickFile={() => sendAttachment('file')}
           onOpenEmoji={() => {
             setPlusOpen(false);
             setEmojiOpen(true);
