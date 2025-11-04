@@ -14,13 +14,11 @@ import {
   Alert,
   Image,
   Linking,
-  Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ChatContextMenu from './ChatContextMenu';
@@ -32,6 +30,8 @@ import { MemberService } from '@/api/memberService';
 import { useAppSelector } from '@/store/hooks';
 import { EmojiMapper } from '@/utils/emojiMapper';
 import { Toast } from '../common/Toast';
+import ReactionDetailsSheet from './ReactionDetailsSheet';
+import ReadStatusSheet from './ReadStatusSheet';
 
 
 type Props = {
@@ -49,7 +49,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   const [showContentModal, setShowContentModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
 
-  const myMemberSeq = useAppSelector(selectMyMemberSeq);
+  const myMemberSeq = useAppSelector(selectMyMemberSeq) ?? 0;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const openContextMenu = (message: ChatMessage) => {
@@ -243,13 +243,6 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
     setShowReactionModal(false);
   };
 
-  // 리액션 삭제 핸들러
-  const handleDeleteReaction = async (chatSeq: number) => {
-    const result = await ChatService.deleteMessageReaction(chatSeq);
-    setReactions(prev => prev?.filter(r => r.chatReactionSeq !== result.chatReactionSeq) ?? []);
-    setShowReactionModal(false);
-  };
-
   // 모달에서 표시할 사용자 목록
   const lists = useMemo(() => {
     const memberList = getMemberList();
@@ -332,188 +325,29 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         onReply={handleReply}
         onCopy={handleCopy}
         onShare={handleShare}
-        onSelectReaction={handleSelectReaction}
+        onSelectReaction={(message, reaction) => handleSelectReaction(message, reaction)}
         title={pressedMessage ?? '메시지'}
       />
 
-      {/* 읽음/안읽음 모달 */}
-      <Modal
+      <ReadStatusSheet
         visible={showReadModal}
-        animationType="slide"
-        transparent
-        statusBarTranslucent
-        hardwareAccelerated
-        presentationStyle="overFullScreen"
-        onRequestClose={() => setShowReadModal(false)}
-      >
-        <View style={styles.readModalOverlay}>
-          <Pressable style={styles.readOverlayTouch} onPress={() => setShowReadModal(false)} />
-          <View
-            style={[
-              styles.readSheet,
-              {
-                backgroundColor: c.chat.sheetBg,
-                borderColor: c.border,
-                paddingBottom: Math.max(12, insets.bottom + 12), // ← 하단 safe area
-              },
-            ]}
-          >
-            <View style={[styles.readSheetHandle, { backgroundColor: c.chat.sheetHandle }]} />
-            <Text style={[styles.readSheetTitle, { color: c.text }]}>읽음 상태</Text>
+        onClose={() => setShowReadModal(false)}
+        readSeqs={lists.readList}
+        unreadSeqs={lists.unreadList}
+      />
 
-            <View style={styles.readSection}>
-              <View style={styles.readSectionHeader}>
-                <Ionicons name="checkmark-done" size={14} color={c.textDim} />
-                <Text style={[styles.readSectionTitle, { color: c.textDim }]}>읽음 ({lists.readList.length})</Text>
-              </View>
-              {lists.readList.length > 0 && (
-                <ScrollView style={{ maxHeight: 180 }}>
-                  <View style={styles.readChips}>
-                    {lists.readList.map((seq) => (
-                      <View key={seq} style={[styles.readChip, { backgroundColor: c.chat.chipBg }]}>
-                        <View style={[styles.readChipDot, { backgroundColor: getMemberProfileColor(seq) }]} />
-                        <Text style={[styles.readChipText, { color: c.text }]} numberOfLines={1}>
-                          {getMemberName(seq)}
-                        </Text>
-                      </View>
-                    ))}
-  
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-
-            <View style={styles.unreadSection}>
-              <View style={styles.readSectionHeader}>
-                <Ionicons name="time" size={14} color={c.textDim} />
-                <Text style={[styles.readSectionTitle, { color: c.textDim }]}>안 읽음 ({lists.unreadList.length})</Text>
-              </View>
-              {lists.unreadList.length === 0 ? (
-                <Text style={[styles.readEmptyText, { color: c.textDim }]}>모두 읽었어요.</Text>
-              ) : (
-                <ScrollView style={{ maxHeight: 180 }}>
-                  <View style={styles.readChips}> 
-                    {lists.unreadList.map((seq) => (
-                      <View key={seq} style={[styles.readChip, { backgroundColor: c.chat.chipBg }]}>
-                        <View style={[styles.readChipDot, { backgroundColor: getMemberProfileColor(seq) }]} />
-                        <Text style={[styles.readChipText, { color: c.text }]} numberOfLines={1}>
-                          {getMemberName(seq)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              )}
-            </View>
-
-            <Pressable onPress={() => setShowReadModal(false)} style={[styles.readCloseBtn, { borderColor: c.border }]}>
-              <Text style={[styles.readCloseBtnText, { color: c.text }]}>닫기</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─────────────────────────────────────────────
-          리액션 상세 모달: 탭(리액션) + 사용자 목록
-        ───────────────────────────────────────────── */}
-      <Modal
+      <ReactionDetailsSheet
         visible={showReactionModal}
-        animationType="slide"
-        transparent
-        statusBarTranslucent
-        hardwareAccelerated
-        presentationStyle="overFullScreen"
-        onRequestClose={() => setShowReactionModal(false)}
-      >
-        <View style={styles.readModalOverlay}>
-          <Pressable style={styles.readOverlayTouch} onPress={() => setShowReactionModal(false)} />
-          <View
-            style={[
-              styles.readSheet,
-              {
-                backgroundColor: c.chat.sheetBg,
-                borderColor: c.border,
-                paddingBottom: Math.max(12, insets.bottom + 12),
-              },
-            ]}
-          >
-            <View style={[styles.readSheetHandle, { backgroundColor: c.chat.sheetHandle }]} />
-            <Text style={[styles.readSheetTitle, { color: c.text }]}>리액션</Text>
-
-            {/* 탭: 리액션 가로 스크롤 */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 8 }}
-              contentContainerStyle={{ paddingHorizontal: 2 }}
-            >
-              {reactionAgg.list.map((rx) => {
-                const isActive = rx.key === activeReactionKey;
-                return (
-                  <Pressable
-                    key={rx.key}
-                    onPress={() => setActiveReactionKey(rx.key)}
-                    style={[
-                      styles.rxTab,
-                      {
-                        backgroundColor: isActive ? c.surface : c.chat.chipBg,
-                        borderColor: isActive ? c.tint : c.border,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.rxTabLabel, { color: isActive ? c.tint : c.text }]}>{rx.label}</Text>
-                    <Text style={[styles.rxTabCount, { color: isActive ? c.tint : c.textDim }]}>
-                      {rx.members.length}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* 선택된 탭의 사용자 목록 */}
-            {(() => {
-              const current = reactionAgg.list.find((r) => r.key === activeReactionKey)
-                ?? (reactionAgg.defaultKey ? reactionAgg.list[0] : null);
-
-              if (!current || current.members.length === 0) {
-                return <Text style={[styles.readEmptyText, { color: c.textDim }]}>아직 아무도 누르지 않았어요.</Text>;
-              }
-
-              return (
-                <ScrollView style={{ maxHeight: 260 }}>
-                  <View style={styles.readChips}>
-                    {current.members.map((seq) => (
-                      <View key={seq} style={[styles.readChip, { backgroundColor: c.chat.chipBg }]}>
-                        <View style={[styles.readChipDot, { backgroundColor: getMemberProfileColor(seq) }]} />
-                        <Text style={[styles.readChipText, { color: c.text }]} numberOfLines={1}>
-                          {getMemberName(seq)}
-                        </Text>
-                        {seq === myMemberSeq && (
-                          <Pressable
-                            onPress={() => handleDeleteReaction(message.chatSeq)}
-                            hitSlop={8}
-                            style={styles.rxDeleteXBtn}
-                          >
-                            <Ionicons name="close-circle" size={14} color={c.textDim} />
-                          </Pressable>
-                        )}
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              );
-            })()}
-
-            <Pressable
-              onPress={() => setShowReactionModal(false)}
-              style={[styles.readCloseBtn, { borderColor: c.border }]}
-            >
-              <Text style={[styles.readCloseBtnText, { color: c.text }]}>닫기</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
+        onClose={() => setShowReactionModal(false)}
+        chatSeq={message.chatSeq}
+        reactions={reactions}
+        myMemberSeq={myMemberSeq}
+        onDeleteMyReaction={async (chatSeq) => {
+          const result = await ChatService.deleteMessageReaction(chatSeq);
+          setReactions(prev => prev?.filter(r => r.chatReactionSeq !== result.chatReactionSeq) ?? []);
+          setShowReactionModal(false);
+        }}
+      />
     </View>
   );
 }
@@ -669,23 +503,5 @@ const styles = StyleSheet.create({
   },
   rxLabel: { fontSize: 10, includeFontPadding: false },
   rxCount: { fontSize: 10, includeFontPadding: false },
-
-  // 탭 스타일
-  rxTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginRight: 8,
-  },
-  rxTabLabel: { fontSize: 18, fontWeight: '600' },
-  rxTabCount: { fontSize: 14, marginLeft: 6 },
-  rxDeleteXBtn: {
-    marginLeft: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   
 });
