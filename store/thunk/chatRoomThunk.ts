@@ -1,5 +1,7 @@
 import { ChatService } from '@/api/chat/chatService';
+import { selectChatRoomList } from '@/selectors/chat/chatSelectors';
 import { setChatRoomError, setChatRoomList, setChatRoomLoading } from '@/store/chatRoomSlice';
+import { useAppSelector } from '@/store/hooks';
 import { createAsyncThunk } from '@reduxjs/toolkit';
 
 export const loadChatRooms = createAsyncThunk(
@@ -8,6 +10,12 @@ export const loadChatRooms = createAsyncThunk(
     try {
       dispatch(setChatRoomLoading(true));
       dispatch(setChatRoomError(null));
+
+      const chatRoomList = useAppSelector(selectChatRoomList);
+      if (chatRoomList && chatRoomList.length > 0) {
+        dispatch(setChatRoomList(chatRoomList));
+        return chatRoomList;
+      }
 
       const chatRooms = await ChatService.getMyChatRooms();
       dispatch(setChatRoomList(chatRooms));

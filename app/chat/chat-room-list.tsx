@@ -19,9 +19,6 @@ import { ChatRoom } from '@/api/chat/chatService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-// 🔻 Card 제거
-// import Card from '@/components/ui/Card';
-
 import { getCurrentApiConfig } from '@/constants/environment';
 import { Colors, type AppColors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -34,6 +31,7 @@ import { clearChatRoomUnread } from '@/store/chatRoomSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadChatRooms } from '@/store/thunk/chatRoomThunk';
 
+import { getTextColorQuick } from '@/utils/colorUtil';
 import { useRouter } from 'expo-router';
 
 /* -------------------------------------------------------------------------- */
@@ -277,12 +275,14 @@ const ChatListItem = React.memo(function ChatListItem({
   const memberSeq = userInfo?.member?.memberSeq ?? 0;
 
   let title = room.chatRoomName ?? '';
+  let profileColor = '#CCCCCC';
   if (!isGroup) {
     const otherMember = room.joiningMemberSeqList.find(seq => seq !== memberSeq);
     if (otherMember) {
       const otherMemberInfo = MemberService.getMemberBySeq(otherMember);
       if (otherMemberInfo) {
         title = otherMemberInfo.name;
+        profileColor = otherMemberInfo.profileColor ?? '#CCCCCC';
       }
     }
   }
@@ -313,7 +313,7 @@ const ChatListItem = React.memo(function ChatListItem({
       accessibilityLabel={`${title} 채팅방으로 이동`}
     >
       {/* RoomIcon */}
-      <View style={[styles.roomIcon, { backgroundColor: roomIconBg }]}>
+      <View style={[styles.roomIcon, { backgroundColor: isGroup ? roomIconBg : profileColor }]}>
         {hasImage ? (
           <Image
             source={{ uri: `${API_BASE_URL}/file/preview/${encodedFileSeq}` }}
@@ -323,7 +323,7 @@ const ChatListItem = React.memo(function ChatListItem({
         ) : (
           isGroup ? <Ionicons name="people" size={24} color={roomIconTextColor} />
             : (
-              <ThemedText style={[styles.roomIconText, { color: roomIconTextColor }]}>{initials}</ThemedText>
+              <ThemedText style={[styles.roomIconText, { color: getTextColorQuick(profileColor) }]}>{initials}</ThemedText>
             )
         )}
         {isGroup && (

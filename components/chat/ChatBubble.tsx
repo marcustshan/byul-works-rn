@@ -3,8 +3,17 @@ import { ChatService, type ChatMessage, type ChatReaction, type ChatRoom } from 
 import { getCurrentApiConfig } from '@/constants/environment';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { selectMemberBySeq, selectMemberList, selectMemberProfileColor, selectMyMemberSeq } from '@/selectors/member/memberSelectors';
+import { selectMemberList, selectMyMemberSeq } from '@/selectors/member/memberSelectors';
 import { store } from '@/store';
+import {
+  aggregateReactions,
+  buildPreviewSegments,
+  formatChatTime,
+  getParentPlainText,
+  getReadMeta,
+  hasCodeFence,
+  stripHtmlMentions,
+} from '@/utils/chatUtil';
 import { encodeBase64, getWeekdayLabel } from '@/utils/commonUtil';
 import { Ionicons } from '@expo/vector-icons';
 import dayjs from 'dayjs';
@@ -20,8 +29,8 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ChatContextMenu from './ChatContextMenu';
+import CodeBlock from './CodeBlock';
 import FullMessageModal from './FullMessageModal';
 import ImageViewerModal from './ImageViewerModal';
 
@@ -38,14 +47,15 @@ type Props = {
   chatRoom: ChatRoom | null;
   message: ChatMessage;
   isMine: boolean;
+  onScrollToMessage: (chatSeq: number) => void;
+  onSendReply: (message: ChatMessage) => void;
+  onShareMessage: (message: ChatMessage) => void;
 };
 
-export default function ChatBubble({ chatRoom, message, isMine }: Props) {
+export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessage = () => {}, onSendReply = () => {}, onShareMessage = () => {} }: Props) {
   const dark = useColorScheme() === 'dark';
   const c = Colors[dark ? 'dark' : 'light'];
-  const insets = useSafeAreaInsets(); // ← 하단 인셋 확보
   const [showReadModal, setShowReadModal] = useState(false);
-  // ...컴포넌트 내부 state (추가)
   const [showContentModal, setShowContentModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
 
@@ -95,13 +105,6 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   const getMemberList = () => {
     return selectMemberList(store.getState());
   }
-  const getMemberName = (seq: number) => {
-    const member = selectMemberBySeq(seq)(store.getState());
-    return member?.name ?? `#${seq}`;
-  }
-  const getMemberProfileColor = (seq: number) => {
-    return selectMemberProfileColor(seq)(store.getState());
-  }
 
   const downloadFile = (message: ChatMessage) => {
     Alert.alert('파일 다운로드', '파일을 다운로드 하시겠습니까?', [
@@ -113,24 +116,43 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   }
 
   const handleReply = (msg: ChatMessage) => {
-    // TODO - 채팅 답장 기능 구현
-    Toast.show({
-      message: '답장 기능은 추후 추가 예정입니다.',
-      type: 'info',
-    });
+    // 채팅 답장
+    if (onSendReply) {
+      onSendReply(msg);
+    }
   };
   
   const handleCopy = async (text: string) => {
-    if (text) await Clipboard.setStringAsync(text);
+    if (text) {
+      await Clipboard.setStringAsync(text);
+      Toast.show({ message: '복사되었습니다.', type: 'success' });
+    }
   };
   
-  const handleShare = (payload: { message?: string; url?: string }) => {
-    // TODO - 채팅 공유 기능 구현
-    Toast.show({
-      message: '공유 기능은 추후 추가 예정입니다.',
-      type: 'info',
-    });
+  const handleShare = (message: ChatMessage) => {
+    // 채팅 공유
+    if (onShareMessage) {
+      onShareMessage(message);
+    }
   };
+
+  // 답장 채팅에 대한 정보 처리
+  const getSenderName = (memberSeq?: number) => memberSeq ? MemberService.getMemberName(memberSeq) : '알 수 없음';
+  const parent = message.parentChat ?? null;
+
+  let parentPlainText = getParentPlainText(parent);
+
+  const preview = useMemo(() => {
+    const raw = message.content ?? '';
+    return buildPreviewSegments(raw, { previewMaxChars: 240, maxCodeBlocks: 1 });
+  }, [message.content]);
+
+  const API_BASE_URL = getCurrentApiConfig().BASE_URL;
+  const parentEncodedFileSeq = encodeBase64(parent?.fileSeq?.toString() ?? '');
+  const parentImagePreviewUri =
+    parent?.chatType === 'I'
+      ? `${API_BASE_URL}/file/preview/${parentEncodedFileSeq}`
+      : undefined;
 
   const renderContent = () => {
     switch (message.chatType) {
@@ -186,18 +208,36 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
         );
       default:
         return (
-          <Pressable onLongPress={() => openContextMenu(message)}>
-            <Text
-              style={[styles.text, { color: c.text }]}
-              numberOfLines={isLong ? 6 : undefined} // 미리보기는 6줄로 제한
-            >
-              {plainText}
-            </Text>
-            {isLong && (
-              <Pressable onPress={() => setShowContentModal(true)} style={{ alignSelf: 'flex-end', marginTop: 6 }} hitSlop={6}>
-                <Text style={{ color: c.tint, fontSize: 12 }}>더보기</Text>
-              </Pressable>
-            )}
+          <Pressable
+            onLongPress={() => openContextMenu(message)}
+            onPress={() => {
+              const raw = message.content ?? '';
+              const longText = stripHtmlMentions(raw).length > 240;
+              if (longText || hasCodeFence(raw)) setShowContentModal(true);
+            }}
+          >
+            <View style={{ gap: 8 }}>
+              {preview.segments.map((seg, i) =>
+                seg.type === 'code' ? (
+                  <CodeBlock
+                    key={`code_${i}`}
+                    code={seg.content}
+                    lang={seg.lang}
+                    dark={dark}
+                    showLineNumbers={false}
+                    wrapLongLines
+                    copyable
+                  />
+                ) : (
+                  <Text key={`txt_${i}`} style={[styles.text, { color: c.text }]} selectable>
+                    {stripHtmlMentions(seg.content)}
+                  </Text>
+                )
+              )}
+              {preview.truncated && (
+                <Text style={{ color: c.tint, fontSize: 12, alignSelf: 'flex-end' }}>더보기</Text>
+              )}
+            </View>
           </Pressable>
         );
     }
@@ -206,35 +246,9 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
   const readMeta = getReadMeta(chatRoom, message);
 
   const reactionAgg = useMemo(() => {
-    const map = new Map<
-      string,
-      { key: string; label: string; members: number[] }
-    >();
-
-    (reactions ?? []).forEach((r: ChatReaction) => {
-      // key는 서버 스키마에 맞게 reactionCode/emoji 등 fallback
-      const key = r.chatReactionSeq.toString();
-
-      const label = r.reaction;
-
-      const memberSeq: number = r.memberSeq;
-
-      if (!map.has(key)) {
-        map.set(key, { key, label, members: [] });
-      }
-      map.get(key)!.members.push(memberSeq);
-    });
-
-    const list = Array.from(map.values()).sort(
-      (a, b) => b.members.length - a.members.length
-    );
-
-    return {
-      list,
-      hasAny: list.length > 0,
-      defaultKey: list[0]?.key ?? null,
-    };
+    return aggregateReactions(reactions, myMemberSeq);
   }, [reactions, myMemberSeq]);
+  
 
   // 리액션 선택 핸들러
   const handleSelectReaction = async (message: ChatMessage, reaction: string) => {
@@ -270,6 +284,61 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
           },
         ]}
       >
+        {parent && (
+          <Pressable
+            onPress={() => {
+              if (parent?.chatSeq && onScrollToMessage) {
+                onScrollToMessage(parent.chatSeq); // ✅ 부모 메시지로 이동
+              }
+            }}
+            onLongPress={() => openContextMenu(parent)}
+            style={[
+              styles.replyBox,
+              { borderColor: c.border, backgroundColor: c.chat.chipBg },
+            ]}
+            hitSlop={6}
+          >
+            <View style={[styles.replyLeftBar, { backgroundColor: MemberService.getMemberProfileColor(parent?.memberSeq) }]} />
+            {/* 썸네일/아이콘 */}
+            <View style={styles.replyThumbWrap}>
+              {parent?.chatType === 'I' && !!parentImagePreviewUri ? (
+                <Image source={{ uri: parentImagePreviewUri }} style={styles.replyThumbImage} />
+              ) : parent?.chatType === 'F' ? (
+                <View style={styles.replyFileIcon}>
+                  <Ionicons name="document-text" size={14} color={c.textDim} />
+                </View>
+              ) : parent?.chatType === 'E' ? (
+                <View style={styles.replyEmojiIcon}>
+                  <Ionicons name="happy" size={14} color={c.textDim} />
+                </View>
+              ) : parent?.chatType === 'L' ? (
+                <View style={styles.replyLinkIcon}>
+                  <Ionicons name="link" size={14} color={c.textDim} />
+                </View>
+              ) : (
+                <View style={styles.replyTextIcon}>
+                  <Ionicons name="chatbubble-ellipses" size={14} color={c.textDim} />
+                </View>
+              )}
+            </View>
+
+            {/* 텍스트 */}
+            <View>
+              <Text style={[styles.replySender, { color: c.text }]} numberOfLines={1}>
+                {getSenderName(parent?.memberSeq)}
+              </Text>
+              <Text
+                style={[
+                  styles.replySnippet,
+                  { color: parent?.chatType === 'L' ? c.tint : c.textDim },
+                ]}
+                numberOfLines={2}
+              >
+                {parentPlainText || '(내용 없음)'}
+              </Text>
+            </View>
+          </Pressable>
+        )}
         {renderContent()}
 
         {/* (추가) 메시지 전체보기 모달 */}
@@ -278,7 +347,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
             visible={showContentModal}
             onClose={() => setShowContentModal(false)}
             title="메시지"
-            content={plainText}
+            content={message.content ?? ''}
             chatType={message.chatType as 'M' | 'I' | 'F' | 'L'}
           />
         )}
@@ -286,7 +355,7 @@ export default function ChatBubble({ chatRoom, message, isMine }: Props) {
 
       {/* 시간 + 읽음 배지 */}
       <View style={[styles.metaRow, { alignSelf: isMine ? 'flex-end' : 'flex-start' }]}>
-        <Text style={[styles.time, { color: c.textDim }]}>{getFormattedTime(message.createDate)}</Text>
+        <Text style={[styles.time, { color: c.textDim }]}>{formatChatTime(message.createDate, 'ko')}</Text>
 
         {readMeta.show && (
           <Pressable
@@ -360,31 +429,6 @@ function getFormattedTime(createDate: string) {
   return date.format(`YYYY-MM-DD(${getWeekdayLabel(date, { locale: 'ko', style: 'short' })}) HH:mm`);
 }
 
-function getReadMeta(
-  chatRoom: ChatRoom | null,
-  msg: ChatMessage
-): { show: boolean; count: number; readSeqs: number[]; unreadSeqs: number[] } {
-  const read = msg.readMembers.length;
-
-  if (read <= 0) return { show: false, count: 0, readSeqs: [], unreadSeqs: [] };
-
-  const unreadSeqs = chatRoom?.joiningMemberSeqList.filter((s) => !msg.readMembers.includes(s)) ?? [];
-
-  return {
-    show: true,
-    count: read,
-    readSeqs: msg.readMembers,
-    unreadSeqs,
-  };
-}
-
-function stripHtmlMentions(html: string) {
-  return html
-    .replace(/<m [^>]*>(.*?)<\/m>/g, '$1')
-    .replace(/<br\s*\/?>/g, '\n')
-    .replace(/<[^>]+>/g, '');
-}
-
 const styles = StyleSheet.create({
   wrap: { marginVertical: 6, maxWidth: '100%', paddingHorizontal: 6 },
   senderWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -431,56 +475,6 @@ const styles = StyleSheet.create({
 
   image: { width: 200, height: 200, borderRadius: 12, resizeMode: 'cover' },
 
-  /** 모달 & 바텀시트 (네임스페이스: readModal*) */
-  readModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(17, 24, 39, 0.45)',
-  },
-  readOverlayTouch: { flex: 1 },
-  readSheet: {
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
-    paddingHorizontal: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  readSheetHandle: {
-    alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: 999,
-    marginBottom: 8,
-  },
-  readSheetTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
-
-  readSection: { marginTop: 6 },
-  unreadSection: { marginTop: 16 },
-  readSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-  readSectionTitle: { fontSize: 12, fontWeight: '600' },
-  readEmptyText: { fontSize: 12 },
-
-  readChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  readChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  readChipDot: { width: 12, height: 12, borderRadius: 999, marginRight: 6 },
-  readChipText: { fontSize: 13, maxWidth: 180 },
-
-  readCloseBtn: {
-    marginTop: 12,
-    alignSelf: 'stretch',
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-  },
-  readCloseBtnText: { fontSize: 14, fontWeight: '600' },
-
   // 리액션 요약(버블 아래 줄)
   rxRow: {
     flexDirection: 'row',
@@ -504,4 +498,66 @@ const styles = StyleSheet.create({
   rxLabel: { fontSize: 10, includeFontPadding: false },
   rxCount: { fontSize: 10, includeFontPadding: false },
   
+  // ✅ 답장 미리보기
+  replyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 8,
+  },
+  replyLeftBar: {
+    width: 3,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+  },
+  replyThumbWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  replyThumbImage: {
+    width: 28,
+    height: 28,
+    resizeMode: 'cover',
+  },
+  replyFileIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyEmojiIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyLinkIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replyTextIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  replySender: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  replySnippet: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });

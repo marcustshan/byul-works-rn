@@ -45,7 +45,7 @@ export const Colors = {
 
     // === Chat specific (semantic tokens) ===
     chat: {
-      bubbleMineBg: '#D0F4FF',              // 내가 보낸 말풍선 배경
+      bubbleMineBg: '#E3F2FD',              // 내가 보낸 말풍선 배경
       bubbleOtherBg: '#f1f1f1',             // 상대 말풍선 배경
       readBadgeBg: 'rgba(107,114,128,0.12)',// 배지 배경(은은한 회색)
       chipBg: 'rgba(17,24,39,0.04)',        // 모달 칩 배경
@@ -94,7 +94,7 @@ export const Colors = {
 
     // === Chat specific ===
     chat: {
-      bubbleMineBg: '#3A3F6B',
+      bubbleMineBg: '#294E52',
       bubbleOtherBg: '#373C43',
       readBadgeBg: 'rgba(159,176,192,0.18)',
       chipBg: 'rgba(230,238,246,0.08)',

@@ -49,7 +49,7 @@ export interface ChatMessage {
   fileName: string | null;
   fileSize: string | null;
   parentChatSeq: number | null;
-  parentChat: any | null;
+  parentChat: ChatMessage | null;
   taskCardSeq: number | null;
   deleted: boolean;
   createDate: string;

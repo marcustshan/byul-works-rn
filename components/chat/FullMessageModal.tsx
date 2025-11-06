@@ -1,9 +1,10 @@
 // components/chat/FullMessageModal.tsx
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { parseFencedBlocks, stripHtmlMentions } from '@/utils/chatUtil';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Linking,
   Modal,
@@ -14,6 +15,7 @@ import {
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CodeBlock from './CodeBlock';
 
 type Props = {
   visible: boolean;
@@ -31,6 +33,7 @@ export default function FullMessageModal({
   chatType = 'M',
 }: Props) {
   const scheme = useColorScheme();
+  const dark = scheme === 'dark';
   const c = Colors[scheme ?? 'light'];
   const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState(false);
@@ -51,17 +54,7 @@ export default function FullMessageModal({
     }
   };
 
-  // useEffect(() => {
-  //   const backAction = () => {
-  //     console.log('backAction');
-  //     onClose();
-  //     return true;
-  //   }
-  //   const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
-
-  //   // cleanup: 언마운트 시 이벤트 해제
-  //   return () => backHandler.remove();
-  // }, []);
+  const segments = useMemo(() => parseFencedBlocks(content ?? ''), [content]);
 
   return (
     <Modal
@@ -93,9 +86,34 @@ export default function FullMessageModal({
             </Pressable>
           </View>
 
-          {/* 본문 */}
-          <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ paddingBottom: 8 }}>
-            <Text selectable style={[styles.content, { color: c.text }]}>{content}</Text>
+          {/* 본문: 코드 블록/일반 텍스트 혼합 렌더 */}
+          <ScrollView
+            style={{ maxHeight: 420 }}
+            contentContainerStyle={{ paddingBottom: 8, gap: 12 }}
+          >
+            {segments.map((seg, i) =>
+              seg.type === 'code' ? (
+                <CodeBlock
+                  key={`m_code_${i}`}
+                  code={seg.content}
+                  lang={seg.lang ?? undefined}
+                  dark={dark}
+                  wrapLongLines
+                  copyable
+                />
+              ) : (
+                <Text
+                  key={`m_txt_${i}`}
+                  selectable
+                  style={{ color: c.text, fontSize: 15, lineHeight: 22 }}
+                >
+                  {stripHtmlMentions(seg.content)}
+                </Text>
+              )
+            )}
+            {(!content || content.trim().length === 0) && (
+              <Text style={{ color: c.textDim, fontSize: 14 }}>내용이 없습니다.</Text>
+            )}
           </ScrollView>
 
           {/* 링크 타입이면 별도 버튼 */}
@@ -148,7 +166,6 @@ const styles = StyleSheet.create({
   handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 999, marginBottom: 8 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   title: { fontSize: 16, fontWeight: '700' },
-  content: { fontSize: 15, lineHeight: 22 },
 
   linkBtn: {
     marginTop: 4,

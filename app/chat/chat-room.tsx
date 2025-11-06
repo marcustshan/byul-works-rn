@@ -10,6 +10,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StatusBar,
   StyleSheet,
   Text,
@@ -26,6 +27,7 @@ import ChatBubble from '@/components/chat/ChatBubble';
 import ChatRoomHeader from '@/components/chat/ChatRoomHeader';
 import EmojiPickerModal from '@/components/chat/EmojiPickerModal';
 import PlusMenuSheet from '@/components/chat/PlustMenuSheet';
+import { Toast } from '@/components/common/Toast';
 import { Colors } from '@/constants/theme';
 import { selectUserInfo } from '@/hooks/selectors';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -53,6 +55,11 @@ export default function ChatRoomScreen() {
 
   // 데이터 상태
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = [...messages];
+  }, [messages]);
+
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
@@ -62,6 +69,17 @@ export default function ChatRoomScreen() {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [minChatSeq, setMinChatSeq] = useState<number | null>(null);
   const [maxChatSeq, setMaxChatSeq] = useState<number | null>(null);
+
+  const minChatSeqRef = useRef<number | null>(null);
+  useEffect(() => { minChatSeqRef.current = minChatSeq; }, [minChatSeq]);
+  const maxChatSeqRef = useRef<number | null>(null);
+  useEffect(() => { maxChatSeqRef.current = maxChatSeq; }, [maxChatSeq]);
+  const hasMoreMessagesRef = useRef<boolean>(true);
+  useEffect(() => { hasMoreMessagesRef.current = hasMoreMessages; }, [hasMoreMessages]);
+
+  // 목표 메시지 찾는 중 플래그
+  const [findingTarget, setFindingTarget] = useState(false);
+  const findingRef = useRef(false);
 
   // FAB 표시/위치
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -73,6 +91,13 @@ export default function ChatRoomScreen() {
   // 더보기 모달 상태
   const [plusOpen, setPlusOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+
+  // 답장 대상 메시지
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const replyRef = useRef<ChatMessage | null>(null);
+  useEffect(() => {
+    replyRef.current = replyTarget;
+  }, [replyTarget]);
 
   // 소켓 매니저
   const mgr = stompManager();
@@ -86,6 +111,11 @@ export default function ChatRoomScreen() {
   // 첨부파일 종류: 이미지, 파일
   type AttachmentKind = 'image' | 'file';
 
+  // --- 유틸: 정렬(오래된 -> 최신) ---
+  const sortMessages = useCallback((rows: ChatMessage[]) => {
+    return [...rows].sort((a, b) => b.chatSeq - a.chatSeq);
+  }, []);
+
   // ------ 업로드 API 연동 ------
   async function uploadFileToServer(
     rnFile: { uri: string; name: string; type: string },
@@ -98,6 +128,9 @@ export default function ChatRoomScreen() {
   // ------ 전송 도우미 ------
   const sendAttachment = useCallback(async (kind: AttachmentKind) => {
     setPlusOpen(false);
+
+    const parent = replyRef.current;
+    const parentSeq = parent?.chatSeq ?? null;
   
     // 파일 선택(이미지, 파일)
     let asset:
@@ -146,6 +179,7 @@ export default function ChatRoomScreen() {
         chatRoomSeq,
         chatType, // 'I' | 'F'
         fileSeq: uploaded.fileSeq,
+        parentChat: parent ?? undefined,
       };
   
       // 낙관적 메시지
@@ -162,8 +196,8 @@ export default function ChatRoomScreen() {
         fileSeq: uploaded.fileSeq ?? null,
         fileName: uploaded.fileName ?? rnFile.name,
         fileSize: uploaded.fileSize ?? fileSize,
-        parentChatSeq: null,
-        parentChat: null,
+        parentChatSeq: parentSeq ?? null,
+        parentChat: parent ?? null,
         taskCardSeq: null,
         deleted: false,
         createDate: new Date().toISOString(),
@@ -174,6 +208,7 @@ export default function ChatRoomScreen() {
       setMessages(prev => [...prev, optimistic]);
       ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
       requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+      setReplyTarget(null);
     } catch (e) {
       // TODO: 토스트/알럿
       console.error('attachment failed', e);
@@ -184,6 +219,9 @@ export default function ChatRoomScreen() {
   const sendEmoji = useCallback(async (emojiPath: string) => {
     setEmojiOpen(false);
 
+    const parent = replyRef.current;
+    const parentSeq = parent?.chatSeq ?? null;
+
     const sendMessage: ChatSendType = {
       content: '', // 이모지는 emojiPath로 렌더
       memberName,
@@ -191,6 +229,7 @@ export default function ChatRoomScreen() {
       chatRoomSeq,
       chatType: 'E',
       emojiPath,
+      parentChat: parent ?? undefined,
     };
 
     const optimistic: ChatMessage = {
@@ -206,8 +245,8 @@ export default function ChatRoomScreen() {
       fileSeq: null,
       fileName: null,
       fileSize: null,
-      parentChatSeq: null,
-      parentChat: null,
+      parentChatSeq: parentSeq ?? null,
+      parentChat: parent ?? null,
       taskCardSeq: null,
       deleted: false,
       createDate: new Date().toISOString(),
@@ -218,7 +257,112 @@ export default function ChatRoomScreen() {
     setMessages(prev => [...prev, optimistic]);
     ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+    setReplyTarget(null);
   }, [chatRoomSeq, memberSeq, memberName, roomTitle]);
+
+  // 답장 관련 소스 시작 ------------------------------------------------------------
+  const beginReply = useCallback((parent: ChatMessage) => {
+    setReplyTarget(parent);
+    requestAnimationFrame(() => inputRef.current?.focus());
+    // 하단으로 스크롤
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+  }, []);
+  
+  const cancelReply = useCallback(() => setReplyTarget(null), []);
+  
+  const getSenderName = (seq?: number) =>
+    seq ? MemberService.getMemberName(seq) : '알 수 없음';
+  
+  const getReplySnippet = (m: ChatMessage) => {
+    if (!m) return '';
+    if (m.chatType === 'M') {
+      return (m.content ?? '').replace(/<m [^>]*>(.*?)<\/m>/g, '$1')
+                              .replace(/<br\s*\/?>/g, '\n')
+                              .replace(/<[^>]+>/g, '');
+    }
+    if (m.chatType === 'L') return m.content ?? '';
+    return m.fileName ?? m.content ?? '';
+  };
+
+  // 답장 채팅 찾아가기
+  const scrollToMessageOrFetch = useCallback(async (targetSeq: number) => {
+    // 1) 먼저 로컬에서 시도
+    const tryScroll = () => {
+      const list = messagesRef.current;
+      const idx = list.findIndex(m => m.chatSeq === targetSeq);
+      if (idx >= 0) {
+        try {
+          listRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+        } catch {
+          // 레이아웃 미계산 시 폴백
+          listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }
+        return true;
+      }
+      return false;
+    };
+  
+    if (tryScroll()) return;
+  
+    // 2) 이미 다른 탐색이 진행 중이면 무시
+    if (findingRef.current) return;
+    findingRef.current = true;
+    setFindingTarget(true);
+  
+    try {
+      // 안전장치: 너무 오래 끌지 않도록 최대 N페이지
+      const MAX_HOPS = 10;
+  
+      for (let hop = 0; hop < MAX_HOPS; hop++) {
+        // 더 불러올 과거가 없으면 중단
+        if (!hasMoreMessagesRef.current || !minChatSeqRef.current) break;
+  
+        const pageRequest: ChatPageRequest = {
+          size: 50,                // 한 번에 좀 더 크게
+          hasPrev: true,
+          hasNext: false,
+          prev: true,
+          baseChatSeq: minChatSeqRef.current!,
+          minChatSeq: minChatSeqRef.current!,
+          maxChatSeq: maxChatSeqRef.current || undefined,
+          includeBase: false,
+        };
+  
+        const result = await ChatService.getRoomMessages(chatRoomSeq, pageRequest);
+  
+        // 머지(중복 제거 + 정렬)
+        if (result?.content?.length) {
+          setMessages(prev => {
+            const seen = new Set(prev.map(m => m.chatSeq));
+            const add = result.content.filter(m => !seen.has(m.chatSeq));
+            if (add.length === 0) return prev;
+            const merged = [...prev, ...add];
+            return sortMessages(merged);
+          });
+  
+          // 페이징 상태 업데이트
+          setHasMoreMessages(!!result.hasPrev);
+          setMinChatSeq(result.minChatSeq ?? minChatSeqRef.current);
+          setMaxChatSeq(result.maxChatSeq ?? maxChatSeqRef.current);
+  
+          // 병합 후 한 번 더 시도
+          await new Promise(r => requestAnimationFrame(r)); // 레이아웃 한 틱 대기
+          if (tryScroll()) return;
+        } else {
+          setHasMoreMessages(false);
+          break;
+        }
+      }
+  
+      // 여기까지 못 찾으면 포기
+      Toast.show({ message: '메시지를 더 불러왔지만 찾지 못했습니다.', type: 'info' });
+    } finally {
+      findingRef.current = false;
+      setFindingTarget(false);
+    }
+  }, [chatRoomSeq, sortMessages]);
+
+  // 답장 관련 소스 끝 ------------------------------------------------------------
 
   useFocusEffect(
     useCallback(() => {
@@ -235,22 +379,18 @@ export default function ChatRoomScreen() {
     }, [dispatch, chatRoomSeq])
   );
 
-  // --- 유틸: 정렬(오래된 -> 최신) ---
-  const sortMessages = useCallback((rows: ChatMessage[]) => {
-    return [...rows].sort((a, b) => b.chatSeq - a.chatSeq);
-  }, []);
-
   /* ----------------------------- 초기 로딩 ----------------------------- */
   const loadInitial = useCallback(async () => {
     if (!Number.isFinite(chatRoomSeq)) return;
     setLoading(true);
     try {
+      const page = await ChatService.getRoomMessages(chatRoomSeq, { size: 30 });
+      setMessages(sortMessages(page.content) ?? []);
+
       // 방 참여 처리 (읽음 처리 포함)
       await ChatService.joinRoom(chatRoomSeq).catch(() => {});
       // 해당 방에 대한 안읽음 초기화 (전부 읽음으로 가정)
       dispatch(clearChatRoomUnread(chatRoomSeq));
-      const page = await ChatService.getRoomMessages(chatRoomSeq, { size: 30 });
-      setMessages(sortMessages(page.content) ?? []);
 
       // ✅ 페이징 상태 업데이트
       setHasMoreMessages(!!page?.hasPrev);
@@ -329,14 +469,12 @@ export default function ChatRoomScreen() {
       const reactionSub = mgr.subscribe(`/topic/create/reaction`, (frame) => {
         if (canceled) return;
         const body: ChatReaction = JSON.parse(frame.body);
-        console.log('reactionSub', body);
         setMessages(prev => prev.map(m => m.chatSeq === body.chatSeq ? { ...m, chatReactions: [...(m.chatReactions ?? []), body] } : m));
       });
       // 채팅 리액션 삭제 구독
       const reactionDeleteSub = mgr.subscribe(`/topic/remove/reaction`, (frame) => {
         if (canceled) return;
         const body: ChatReaction = JSON.parse(frame.body);
-        console.log('reactionDeleteSub', body);
         setMessages(prev => prev.map(m => m.chatSeq === body.chatSeq ? { ...m, chatReactions: (m.chatReactions ?? []).filter(r => r.chatReactionSeq !== body.chatReactionSeq) } : m));
       });
 
@@ -388,7 +526,7 @@ export default function ChatRoomScreen() {
 
 
   // ✅ 최상단에서 더 불러오기 (스크롤 이동/복원 없음)
-  const loadOlder = useCallback(async () => {
+  const loadMoreChatList = useCallback(async () => {
     if (!chatRoomSeq || !hasMoreMessages || isLoadingMore || !minChatSeq) return;
     setIsLoadingMore(true);
     try {
@@ -426,7 +564,21 @@ export default function ChatRoomScreen() {
   /* ----------------------------- 메시지 렌더 ----------------------------- */
   const renderItem = useCallback(
     ({ item }: { item: ChatMessage }) => (
-      <ChatBubble chatRoom={chatRoom} message={item} isMine={item.memberSeq === memberSeq} />
+      <ChatBubble
+        chatRoom={chatRoom}
+        message={item}
+        isMine={item.memberSeq === memberSeq}
+        onSendReply={(parentMessage: ChatMessage) => {
+          // 채팅 답장
+          beginReply(parentMessage);
+        }}
+        onShareMessage={(targetMessage: ChatMessage) => {
+          // 채팅 공유
+        }}
+        onScrollToMessage={(seq) => {
+          scrollToMessageOrFetch(seq);
+        }}
+      />
     ),
     [memberSeq]
   );
@@ -438,12 +590,16 @@ export default function ChatRoomScreen() {
     if (!trimmed || sending) return;
     setSending(true);
 
+    const parent = replyRef.current;
+    const parentSeq = parent?.chatSeq ?? null;
+
     const sendMessage: ChatSendType = {
       content: trimmed,
       memberName,
       chatRoomName: roomTitle,
       chatRoomSeq,
       chatType: 'M',
+      parentChat: parent ?? undefined,
     };
 
     const optimistic: ChatMessage = {
@@ -459,8 +615,8 @@ export default function ChatRoomScreen() {
       fileSeq: null,
       fileName: null,
       fileSize: null,
-      parentChatSeq: null,
-      parentChat: null,
+      parentChatSeq: parentSeq ?? null,
+      parentChat: parent ?? null,
       taskCardSeq: null,
       deleted: false,
       createDate: new Date().toISOString(),
@@ -475,6 +631,7 @@ export default function ChatRoomScreen() {
 
     try {
       ChatSocketService.sendChatMessage(chatRoomSeq, sendMessage);
+      setReplyTarget(null);
     } catch {
       setMessages(prev => prev.filter(m => m.chatSeq !== optimistic.chatSeq));
       setInput(trimmed);
@@ -531,7 +688,7 @@ export default function ChatRoomScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               inverted={true}
-              onEndReached={loadOlder}
+              onEndReached={loadMoreChatList}
               onEndReachedThreshold={0.5}
               // ✅ 스크롤 감지: 상단 로드 + 하단 FAB 노출
               onScroll={(e) => {
@@ -570,6 +727,12 @@ export default function ChatRoomScreen() {
           </TouchableOpacity>
         )}
 
+        {findingTarget && (
+          <View style={{ position: 'absolute', top: '50%', alignSelf: 'center', padding: 6, borderRadius: 8, backgroundColor: colors.surface }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        )}
+
         {/* 하단 입력창 */}
         <View
           style={[
@@ -578,36 +741,71 @@ export default function ChatRoomScreen() {
           ]}
           onLayout={(e) => setInputBarH(e.nativeEvent.layout.height)}
         >
-          {/* ✅ + 버튼 */}
-          <TouchableOpacity
-            onPress={() => setPlusOpen(true)}
-            style={{ marginRight: 6, padding: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="더 많은 전송 옵션"
-          >
-            <Ionicons name="add" size={22} color={colors.primary} />
-          </TouchableOpacity>
+          {replyTarget && (
+            <Pressable
+              onPress={() => {
+                const seq = replyTarget.chatSeq;
+                const index = messages.findIndex(m => m.chatSeq === seq);
+                if (index >= 0) {
+                  listRef.current?.scrollToIndex({ index, animated: true });
+                } else {
+                  Toast.show({ message: '원본 메시지를 찾을 수 없습니다.', type: 'info' });
+                }
+              }}
+              style={[
+                styles.replyBar,
+                { borderColor: colors.border, backgroundColor: colors.surface },
+              ]}
+            >
+              <View style={[styles.replyBarLeft, { backgroundColor: MemberService.getMemberProfileColor(replyTarget.memberSeq) }]} />
+              <View style={styles.replyBarBody}>
+                <Text style={[styles.replyBarSender, { color: colors.text }]}>
+                  {getSenderName(replyTarget.memberSeq)}
+                </Text>
+                <Text
+                  style={[styles.replyBarText, { color: replyTarget.chatType === 'L' ? colors.tint : colors.textMuted }]}
+                  numberOfLines={2}
+                >
+                  {getReplySnippet(replyTarget) || '(내용 없음)'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={cancelReply} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </Pressable>
+          )}
+          <View style={styles.inputRow}>
+            <TouchableOpacity
+              onPress={() => setPlusOpen(true)}
+              style={{ marginRight: 6, padding: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="더 많은 전송 옵션"
+            >
+              <Ionicons name="add" size={22} color={colors.primary} />
+            </TouchableOpacity>
 
-          <TextInput
-            ref={inputRef}
-            style={[styles.input, { color: colors.text }]}
-            value={input}
-            onChangeText={setInput}
-            placeholder="메시지를 입력하세요"
-            placeholderTextColor={colors.textMuted}
-            multiline
-          />
-          <TouchableOpacity
-            onPress={() => sendTextMessage(input)}
-            disabled={!input.trim() || sending}
-            style={[
-              styles.sendBtn,
-              { backgroundColor: colors.primary },
-              (!input.trim() || sending) && styles.sendBtnDisabled,
-            ]}
-          >
-            <Ionicons name="send" size={18} color={colors.onPrimary} />
-          </TouchableOpacity>
+            <TextInput
+              ref={inputRef}
+              style={[styles.input, { color: colors.text }]}
+              value={input}
+              onChangeText={setInput}
+              placeholder="메시지를 입력하세요"
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+
+            <TouchableOpacity
+              onPress={() => sendTextMessage(input)}
+              disabled={!input.trim() || sending}
+              style={[
+                styles.sendBtn,
+                { backgroundColor: colors.primary },
+                (!input.trim() || sending) && styles.sendBtnDisabled,
+              ]}
+            >
+              <Ionicons name="send" size={18} color={colors.onPrimary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ➕ 메뉴 시트 */}
@@ -641,12 +839,16 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 12, paddingVertical: 10 },
 
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingHorizontal: 10,
     paddingTop: 6,
     paddingBottom: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   input: {
     flex: 1,
@@ -678,5 +880,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
+  },
+
+  // ✅ 답장 미리보기 바
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 6,
+  },
+  replyBarLeft: {
+    width: 3,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+  },
+  replyBarBody: {
+    flex: 1,
+  },
+  replyBarSender: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  replyBarText: {
+    fontSize: 12,
+    lineHeight: 16,
+    maxHeight: 40,
+    overflow: 'scroll',
   },
 });

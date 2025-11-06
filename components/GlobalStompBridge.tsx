@@ -77,9 +77,9 @@ export default function GlobalStompBridge() {
     }
 
     // 2) 새로 필요한 구독 추가
-    for (const seq of targetRooms) {
-      if (roomSubsRef.current.has(seq)) continue; // 이미 있음
-      const sub = mgr.subscribe(`/topic/newMessage/${seq}`, (frame) => {
+    for (const chatRoomSeq of targetRooms) {
+      if (roomSubsRef.current.has(chatRoomSeq)) continue; // 이미 있음
+      const sub = mgr.subscribe(`/topic/newMessage/${chatRoomSeq}`, (frame) => {
         let body: ChatMessage | null = null;
         try {
           body = JSON.parse(frame.body);
@@ -130,7 +130,7 @@ export default function GlobalStompBridge() {
         );
       });
 
-      roomSubsRef.current.set(seq, sub);
+      roomSubsRef.current.set(chatRoomSeq, sub);
     }
 
     // 클린업: 여기선 전체 해제하지 않음(필요한 것만 유지)
