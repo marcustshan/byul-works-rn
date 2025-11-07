@@ -22,10 +22,11 @@ import { store } from '@/store';
 import { ToastProvider } from '@/components/common/Toast';
 import GlobalStompBridge from '@/components/GlobalStompBridge';
 
-import { getFcmTokenSafely } from '@/api/firebaseService';
+import { getFcmTokenSafely, registerFcmTokenIfPossible } from '@/api/firebaseService';
 import { ensureFirebaseApp } from '@/config/firebaseConfig';
 
 // ⬇️ 앱 전역 테마 컨텍스트
+import { AuthService } from '@/api/authService';
 import { ThemeProvider as AppThemeProvider } from '@/theme/ThemeProvider';
 
 ensureFirebaseApp();
@@ -88,8 +89,15 @@ function AppShell() {
         }
       }
       const token = await getFcmTokenSafely();
-      if (token) console.log('[Notifications] FCM token:', token);
-      else console.warn('[Notifications] FCM token unavailable');
+      if (token) {
+        const memberSeq = store.getState().auth.userInfo?.member?.memberSeq ?? 0;
+        registerFcmTokenIfPossible(memberSeq, async (token: string) => {
+          await AuthService.setFirebaseToken(token);
+          return token;
+        }, token);
+      }else {
+        console.warn('[Notifications] FCM token unavailable');
+      }
     })();
   }, []);
 

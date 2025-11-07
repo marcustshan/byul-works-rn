@@ -19,6 +19,8 @@ import { Calendar } from 'react-native-calendars';
 import { Member } from '@/api/member/memberService';
 import { Schedule } from '@/api/schedule/scheduleService';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**********************
  * Types
@@ -298,8 +300,15 @@ export default function ScheduleForm({
   /**********************
    * Render
    **********************/
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const iosOffset = headerHeight + insets.top;
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? iosOffset : 0}
+    >
       <View style={[styles.modalContainer, { backgroundColor }]}>        
         {/* Header */}
         <View style={[styles.modalHeader, { borderBottomColor: borderColor }]}>

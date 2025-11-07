@@ -1,5 +1,5 @@
 // utils/chatUtil.ts
-import type { ChatMessage, ChatReaction, ChatRoom } from '@/api/chat/chatService';
+import { ChatService, type ChatMessage, type ChatReaction, type ChatRoom } from '@/api/chat/chatService';
 import { getWeekdayLabel } from '@/utils/commonUtil';
 import dayjs from 'dayjs';
 
@@ -159,4 +159,17 @@ export function aggregateReactions(
 /** (선택) 메시지에 펜스 코드블록이 포함되어 있는지 */
 export function hasCodeFence(raw: string) {
   return /```/.test(raw ?? '');
+}
+
+export function extractLinkFromMessage(raw: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const matches = raw.match(urlRegex);
+  return matches?.map(url => {
+    return url.replace(/[', ";!?.)}\]>]+$/, '');
+  })
+}
+
+export async function getLinkOpenGraph(url: string) {
+  const data = await ChatService.getLinkOpenGraph(url);
+  return data;
 }

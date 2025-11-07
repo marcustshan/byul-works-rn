@@ -25,7 +25,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 type Props = {
   visible: boolean;
@@ -210,82 +210,84 @@ export default function ImageViewerModal({
 
       {/* 모달 콘텐츠 루트: GHRootView (Modal은 별도 네이티브 트리) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={[styles.overlay, { backgroundColor: overlayBg }]}>
-          {/* Safe Area 전체 */}
-          <SafeAreaView style={styles.safeFill} edges={['top', 'bottom', 'left', 'right']}>
-            {/* 상단 바 */}
-            <View style={[styles.topBar, { backgroundColor: chromeBg }]}>
-              <View style={styles.topBarRow}>
-                <Pressable onPress={onClose} hitSlop={12} style={styles.iconBtn} accessibilityLabel="닫기">
-                  <Ionicons name="close" size={22} color={iconColor} />
-                </Pressable>
-                {title ? (
-                  <Text numberOfLines={1} style={[styles.title, { color: textColor }]}>
-                    {title}
-                  </Text>
-                ) : (
-                  <View />
-                )}
-                <View style={styles.spacer} />
+        <SafeAreaProvider>
+          <View style={[styles.overlay, { backgroundColor: overlayBg }]}>
+            {/* Safe Area 전체 */}
+            <SafeAreaView style={styles.safeFill} edges={['top', 'bottom', 'left', 'right']}>
+              {/* 상단 바 */}
+              <View style={[styles.topBar, { backgroundColor: chromeBg }]}>
+                <View style={styles.topBarRow}>
+                  <Pressable onPress={onClose} hitSlop={12} style={styles.iconBtn} accessibilityLabel="닫기">
+                    <Ionicons name="close" size={22} color={iconColor} />
+                  </Pressable>
+                  {title ? (
+                    <Text numberOfLines={1} style={[styles.title, { color: textColor }]}>
+                      {title}
+                    </Text>
+                  ) : (
+                    <View />
+                  )}
+                  <View style={styles.spacer} />
+                </View>
               </View>
-            </View>
 
-            {/* 중앙 뷰어 영역: 이 크기를 기준으로 이미지/경계 계산 */}
-            <View style={styles.centerArea} onLayout={onCenterLayout}>
-              {/* 배경 탭 닫기: 중앙 영역만; 툴바와 겹치지 않음 */}
-              {dismissOnBackdrop && (
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={() => {
-                    const EPS = 0.01;
-                    if (scale.value <= minScale + EPS) onClose();
-                  }}
-                />
-              )}
-
-              {/* 제스처 레이어 */}
-              <GestureDetector gesture={composed}>
-                <Animated.View style={styles.gestureLayer}>
-                  <Animated.Image
-                    source={{ uri }}
-                    resizeMode="contain"
-                    style={[styles.image, animatedImageStyle]}
-                    onLoadStart={() => {
-                      setHasError(false);
-                      setIsLoading(true);
-                      imgOpacity.value = 0;
-                    }}
-                    onLoad={() => {
-                      // no-op
-                    }}
-                    onLoadEnd={() => {
-                      setIsLoading(false);
-                      imgOpacity.value = withTiming(1, { duration: 180 });
-                    }}
-                    onError={() => {
-                      setIsLoading(false);
-                      setHasError(true);
+              {/* 중앙 뷰어 영역: 이 크기를 기준으로 이미지/경계 계산 */}
+              <View style={styles.centerArea} onLayout={onCenterLayout}>
+                {/* 배경 탭 닫기: 중앙 영역만; 툴바와 겹치지 않음 */}
+                {dismissOnBackdrop && (
+                  <Pressable
+                    style={StyleSheet.absoluteFill}
+                    onPress={() => {
+                      const EPS = 0.01;
+                      if (scale.value <= minScale + EPS) onClose();
                     }}
                   />
-                  {/* 로딩 스피너 */}
-                  {isLoading && !hasError && (
-                    <View style={styles.loaderWrap} pointerEvents="none">
-                      <ActivityIndicator size="large" color={iconColor} />
-                    </View>
-                  )}
-                  {/* (선택) 에러 표시 */}
-                  {hasError && (
-                    <View style={styles.loaderWrap}>
-                      <Text style={[styles.errorText, { color: textColor }]}>
-                        이미지를 불러올 수 없어요.
-                      </Text>
-                    </View>
-                  )}
-                </Animated.View>
-              </GestureDetector>
-            </View>
-          </SafeAreaView>
-        </View>
+                )}
+
+                {/* 제스처 레이어 */}
+                <GestureDetector gesture={composed}>
+                  <Animated.View style={styles.gestureLayer}>
+                    <Animated.Image
+                      source={{ uri }}
+                      resizeMode="contain"
+                      style={[styles.image, animatedImageStyle]}
+                      onLoadStart={() => {
+                        setHasError(false);
+                        setIsLoading(true);
+                        imgOpacity.value = 0;
+                      }}
+                      onLoad={() => {
+                        // no-op
+                      }}
+                      onLoadEnd={() => {
+                        setIsLoading(false);
+                        imgOpacity.value = withTiming(1, { duration: 180 });
+                      }}
+                      onError={() => {
+                        setIsLoading(false);
+                        setHasError(true);
+                      }}
+                    />
+                    {/* 로딩 스피너 */}
+                    {isLoading && !hasError && (
+                      <View style={styles.loaderWrap} pointerEvents="none">
+                        <ActivityIndicator size="large" color={iconColor} />
+                      </View>
+                    )}
+                    {/* (선택) 에러 표시 */}
+                    {hasError && (
+                      <View style={styles.loaderWrap}>
+                        <Text style={[styles.errorText, { color: textColor }]}>
+                          이미지를 불러올 수 없어요.
+                        </Text>
+                      </View>
+                    )}
+                  </Animated.View>
+                </GestureDetector>
+              </View>
+            </SafeAreaView>
+          </View>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </Modal>
   );

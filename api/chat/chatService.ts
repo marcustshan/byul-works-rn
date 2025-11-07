@@ -90,6 +90,12 @@ export interface ChatPageRequest {
   includeBase?: boolean;
 }
 
+export interface ChatLinkOpenGraph {
+  description: string;
+  title: string;
+  imageUrl: string;
+}
+
 // 공통 에러 타입 (api.ts의 ApiErrorShape 사용)
 export type ChatError = ApiErrorShape;
 
@@ -303,6 +309,19 @@ export class ChatService {
       return data;
     } catch (error: any) {
       console.error('👍 채팅 리액션 삭제 실패:', error);
+      throw error;
+    }
+  }
+
+  public static async getLinkOpenGraph(url: string): Promise<ChatLinkOpenGraph> {
+    try {
+      const { data } = await api.get<ChatLinkOpenGraph>(`/crawling/openGraph`, {
+        params: { url: url }
+      });
+
+      return data;
+    } catch (error: any) {
+      console.error('🔍 링크 오픈그래프 조회 실패:', error);
       throw error;
     }
   }

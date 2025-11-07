@@ -37,6 +37,8 @@ import type { UserInfo } from '@/store/authSlice';
 import { clearActiveChatRoomSeq, clearChatRoomUnread, setActiveChatRoomSeq, updateChatRoom } from '@/store/chatRoomSlice';
 import { useAppSelector } from '@/store/hooks';
 import { toRnFileFromPickerAsset } from '@/utils/fileNormalize';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ChatRoomScreen() {
   const dispatch = useAppDispatch();
@@ -652,6 +654,10 @@ export default function ChatRoomScreen() {
   // 상/하단 임계값
   const BOTTOM_SHOW_THRESHOLD = 50; // 하단에서 이 정도 이상 떨어져 있으면 FAB 노출
 
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const iosOffset = headerHeight + insets.top;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar />
@@ -672,7 +678,7 @@ export default function ChatRoomScreen() {
       <KeyboardAvoidingView
         style={[styles.body, { position: 'relative' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 30}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? iosOffset : 30}
       >
         {/* 메시지 리스트 */}
         <View style={styles.listWrap}>
@@ -848,7 +854,7 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
   },
   input: {
     flex: 1,

@@ -8,7 +8,9 @@ import { store } from '@/store';
 import {
   aggregateReactions,
   buildPreviewSegments,
+  extractLinkFromMessage,
   formatChatTime,
+  getLinkOpenGraph,
   getParentPlainText,
   getReadMeta,
   hasCodeFence,
@@ -95,10 +97,53 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
     setReactions(message.chatReactions ?? []);
   }, [message.chatSeq, message.chatReactions]);
 
+  // OpenGraph 관련 state
+  const [linkOpenGraph, setLinkOpenGraph] = useState<{ title: string; description: string; imageUrl: string } | null>(null);
+  const [loadingOpenGraph, setLoadingOpenGraph] = useState(false);
 
-  // (추가) 길이 판단 유틸 — 너무 정교할 필요 없이 글자수 기준
-  const plainText = stripHtmlMentions(message.content ?? '');
-  const isLong = message.chatType === 'M' && plainText.length > 240; // 240자 이상이면 '더보기'
+  // 링크 타입 메시지일 때 OpenGraph 데이터 가져오기
+  useEffect(() => {
+    let cancelled = false;
+    
+    if (message.chatType === 'L' && message.content) {
+      const extractedLinks = extractLinkFromMessage(message.content);
+      const url = extractedLinks?.[0];
+      
+      if (url) {
+        setLoadingOpenGraph(true);
+        getLinkOpenGraph(url)
+          .then((data) => {
+            // 컴포넌트가 언마운트되었거나 메시지가 변경된 경우 state 업데이트 방지
+            if (!cancelled) {
+              setLinkOpenGraph(data);
+              setLoadingOpenGraph(false);
+            }
+          })
+          .catch((error) => {
+            if (!cancelled) {
+              console.error('OpenGraph 조회 실패:', error);
+              setLoadingOpenGraph(false);
+            }
+          });
+      } else {
+        if (!cancelled) {
+          setLinkOpenGraph(null);
+          setLoadingOpenGraph(false);
+        }
+      }
+    } else {
+      // 링크 타입이 아니면 초기화
+      if (!cancelled) {
+        setLinkOpenGraph(null);
+        setLoadingOpenGraph(false);
+      }
+    }
+    
+    // cleanup 함수: 메시지가 변경되거나 컴포넌트가 언마운트될 때 취소 플래그 설정
+    return () => {
+      cancelled = true;
+    };
+  }, [message.chatSeq, message.chatType, message.content]);
 
   const senderProfileColor = message.profileColor ?? '#CCCCCC';
 
@@ -202,9 +247,25 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
         );
       case 'L':
         return (
-          <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message)} onPress={() => Linking.openURL(message.content)}>
-            {message.content}
-          </Text>
+          <View>
+            <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message)} onPress={() => Linking.openURL(message.content)}>
+              {extractLinkFromMessage(message.content)?.[0]}
+            </Text>
+            {linkOpenGraph && (
+              <View style={styles.linkOpenGraph}>
+                {linkOpenGraph.imageUrl && (
+                  <Image source={{ uri: linkOpenGraph.imageUrl }} style={styles.linkOpenGraphImage} resizeMode="cover" />
+                )}
+                <View style={styles.linkOpenGraphContent}>
+                  <Text style={[styles.linkOpenGraphTitle, { color: c.text }]}>{linkOpenGraph.title || '제목 없음'}</Text>
+                  <Text style={[styles.linkOpenGraphDescription, { color: c.textDim }]}>{linkOpenGraph.description || '설명 없음'}</Text>
+                </View>
+              </View>
+            )}
+            {loadingOpenGraph && (
+              <Text style={[styles.linkOpenGraphDescription, { color: c.textDim }]}>로딩 중...</Text>
+            )}
+          </View>
         );
       default:
         return (
@@ -430,8 +491,8 @@ function getFormattedTime(createDate: string) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginVertical: 6, maxWidth: '100%', paddingHorizontal: 6 },
-  senderWrap: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  wrap: { marginVertical: 8, maxWidth: '100%', paddingHorizontal: 6 },
+  senderWrap: { flexDirection: 'row', alignItems: 'center', gap: 4, marginVertical: 2 },
   senderProfileCircle: { width: 14, height: 14, borderRadius: 10, marginBottom: 2 },
   sender: { fontSize: 14, marginBottom: 4, fontWeight: '600' },
   bubble: {
@@ -502,7 +563,7 @@ const styles = StyleSheet.create({
   replyBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 2,
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 12,
@@ -559,5 +620,20 @@ const styles = StyleSheet.create({
   replySnippet: {
     fontSize: 12,
     lineHeight: 16,
+    maxWidth: '90%',
+    textOverflow: 'ellipsis',
+    overflow: 'hidden',
+    flexWrap: 'nowrap',
   },
+  linkOpenGraph: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    marginTop: 8
+  },
+  linkOpenGraphImage: { width: 100, height: 100, resizeMode: 'cover' },
+  linkOpenGraphContent: { flexDirection: 'column', gap: 2 },
+  linkOpenGraphTitle: { fontSize: 12, fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' },
+  linkOpenGraphDescription: { fontSize: 12, textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' },
 });

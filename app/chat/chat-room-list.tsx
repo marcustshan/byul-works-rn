@@ -26,11 +26,12 @@ import { encodeBase64 } from '@/utils/commonUtil';
 
 // ✅ Redux
 import { MemberService } from '@/api/memberService';
-import { selectChatRoomError, selectChatRoomList, selectChatRoomLoading, selectUserInfo } from '@/hooks/selectors';
+import { selectChatRoomError, selectChatRoomList, selectChatRoomLoading } from '@/hooks/selectors';
 import { clearChatRoomUnread } from '@/store/chatRoomSlice';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadChatRooms } from '@/store/thunk/chatRoomThunk';
 
+import { selectMyMemberSeq } from '@/selectors/member/memberSelectors';
 import { getTextColorQuick } from '@/utils/colorUtil';
 import { useRouter } from 'expo-router';
 
@@ -67,6 +68,8 @@ export default function ChatRoomListScreen() {
   const searchRef = useRef<TextInput>(null);
 
   const router = useRouter();
+
+  const memberSeq = useAppSelector(selectMyMemberSeq);
 
   // 채팅방 선택
   const openRoom = useCallback((room: ChatRoom) => {
@@ -117,8 +120,8 @@ export default function ChatRoomListScreen() {
 
   const renderItem: ListRenderItem<ChatRoom> = useCallback(({ item }) => (
     // 🔻 카드 대신 Pressable로 “플랫한” 아이템
-    <ChatListItem room={item} colors={colors} onPress={() => openRoom(item)} />
-  ), [colors]);
+    <ChatListItem room={item} colors={colors} memberSeq={memberSeq} onPress={() => openRoom(item)} />
+  ), [colors, memberSeq, openRoom]);
 
   const keyExtractor = useCallback((item: ChatRoom) => String(item.chatRoomSeq), []);
 
@@ -190,7 +193,7 @@ export default function ChatRoomListScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
-          ListEmptyComponent={
+          ListEmptyComponent={() =>
             error
               ? <ErrorState message={error} onRetry={() => dispatch(loadChatRooms())} colors={colors} />
               : <EmptyState tab={tab} query={query} colors={colors} />
@@ -262,17 +265,14 @@ const FilterTabs = React.memo(function FilterTabs({
 /* -------------------------------------------------------------------------- */
 
 const ChatListItem = React.memo(function ChatListItem({
-  room, colors, onPress
-}: { room: ChatRoom; colors: AppColors; onPress: () => void }) {
+  room, colors, onPress, memberSeq
+}: { room: ChatRoom; colors: AppColors; onPress: () => void; memberSeq: number }) {
   const isGroup = (room.joinCnt ?? 0) >= 3;
   const unreadCount = room.newCnt ?? 0;
   const lastMessageMemberSeq = room.lastMsgMemberSeq ?? 0;
   const lastMessageMemberName = MemberService.getMemberName(lastMessageMemberSeq);
   const lastMessage = lastMessageMemberName + ' : ' + room.lastInsertMsg;
   const lastTimestamp = room.lastInsertDate || room.createDate;
-
-  const userInfo = useAppSelector(selectUserInfo);
-  const memberSeq = userInfo?.member?.memberSeq ?? 0;
 
   let title = room.chatRoomName ?? '';
   let profileColor = '#CCCCCC';

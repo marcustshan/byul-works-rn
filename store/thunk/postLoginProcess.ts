@@ -60,8 +60,6 @@ export const postLoginProcess = createAsyncThunk(
       // 2) 현재 상태에서 유저 정보를 먼저 확보 (↔ 기존 코드의 순서 버그 수정)
       const state: any = getState();
       
-      const token = state.auth.token;
-
       const user = state.auth.userInfo;
       const memberSeq: number = user?.member?.memberSeq ?? 0;
 

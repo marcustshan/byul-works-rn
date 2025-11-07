@@ -22,6 +22,8 @@ import { setToken, setUserInfo, UserInfo } from '@/store/authSlice';
 import { useAppDispatch } from '@/store/hooks';
 import { postLoginProcess } from '@/store/thunk/postLoginProcess';
 import { clearAutoLoginInfo, saveAutoLoginInfo } from '@/utils/auth';
+import { useHeaderHeight } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const dispatch = useAppDispatch();
@@ -86,11 +88,15 @@ export default function LoginScreen() {
     }
   };
 
+  const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
+  const iosOffset = headerHeight + insets.top;
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? iosOffset : 0}
     >
       <ThemedView style={styles.container}>
         {/* 상단 브랜드 영역 */}
