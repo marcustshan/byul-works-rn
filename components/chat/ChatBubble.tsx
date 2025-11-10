@@ -81,7 +81,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
         setPressedMessage(`${senderName} : ${message.fileName ?? ''}`);
         break;
       case 'L':
-        setPressedMessage(`${senderName} : ${message.content ?? ''}`);
+        setPressedMessage(`${senderName} : ${extractLinkFromMessage(message.content).plainText ?? ''}`);
         break;
     }
     setMenuOpen(true);
@@ -108,7 +108,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
     
     if (message.chatType === 'L' && message.content) {
       const extractedLinks = extractLinkFromMessage(message.content);
-      const url = extractedLinks?.[0];
+      const url = extractedLinks.links[0];
       
       if (url) {
         setLoadingOpenGraph(true);
@@ -227,7 +227,9 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
       case 'E':
         return (
           <View style={styles.emojiWrap}>
-          <Image source={EmojiMapper[message.emojiPath ?? '']} style={styles.emojiImage} />
+            <Pressable onLongPress={() => openContextMenu(message)} onPress={() => {}}>
+              <Image source={EmojiMapper[message.emojiPath ?? '']} style={styles.emojiImage} />
+            </Pressable>
           </View>
         );
       case 'F':
@@ -247,10 +249,11 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
           </TouchableOpacity>
         );
       case 'L':
+        const extractedLink = extractLinkFromMessage(message.content);
         return (
-          <View>
-            <Text style={[styles.link, { color: c.tint }]} onLongPress={() => openContextMenu(message)} onPress={() => Linking.openURL(message.content)}>
-              {extractLinkFromMessage(message.content)?.[0]}
+          <Pressable onLongPress={() => openContextMenu(message)}>
+            <Text style={[styles.text, { color: c.tint }]} onLongPress={() => openContextMenu(message)} onPress={() => Linking.openURL(extractLinkFromMessage(message.content).links[0])}>
+              {extractedLink.plainText}
             </Text>
             {linkOpenGraph && (
               <View style={styles.linkOpenGraph}>
@@ -266,7 +269,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
             {loadingOpenGraph && (
               <Text style={[styles.linkOpenGraphDescription, { color: c.textDim }]}>로딩 중...</Text>
             )}
-          </View>
+          </Pressable>
         );
       default:
         return (

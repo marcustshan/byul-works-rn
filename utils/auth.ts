@@ -1,4 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AutoLoginInfo {
   id: string;
@@ -11,7 +11,7 @@ interface AutoLoginInfo {
  */
 export const getStoredToken = async (): Promise<string | null> => {
   try {
-    const token = await SecureStore.getItemAsync('userToken');
+    const token = await AsyncStorage.getItem('userToken');
     return token ?? null;
   } catch (e) {
     console.warn('토큰 조회 실패:', e);
@@ -24,7 +24,7 @@ export const getStoredToken = async (): Promise<string | null> => {
  */
 export const saveAutoLoginInfo = async (autoLoginInfo: AutoLoginInfo): Promise<void> => {
   try {
-    await SecureStore.setItemAsync('autoLoginInfo', JSON.stringify(autoLoginInfo));
+    await AsyncStorage.setItem('autoLoginInfo', JSON.stringify(autoLoginInfo));
   } catch (e) {
     console.warn('자동로그인 정보 저장 실패:', e);
   }
@@ -36,7 +36,7 @@ export const saveAutoLoginInfo = async (autoLoginInfo: AutoLoginInfo): Promise<v
  */
 export const getAutoLoginInfo = async (): Promise<AutoLoginInfo | null> => {
   try {
-    const autoLoginInfo = await SecureStore.getItemAsync('autoLoginInfo');
+    const autoLoginInfo = await AsyncStorage.getItem('autoLoginInfo');
     return autoLoginInfo ? JSON.parse(autoLoginInfo) : null;
   } catch (e) {
     console.warn('자동로그인 정보 조회 실패:', e);
@@ -49,7 +49,7 @@ export const getAutoLoginInfo = async (): Promise<AutoLoginInfo | null> => {
  */
 export const clearAutoLoginInfo = async (): Promise<void> => {
   try {
-    await SecureStore.deleteItemAsync('autoLoginInfo');
+    await AsyncStorage.removeItem('autoLoginInfo');
   } catch (e) {
     console.warn('자동로그인 정보 삭제 실패:', e);
   }
@@ -61,7 +61,7 @@ export const clearAutoLoginInfo = async (): Promise<void> => {
  */
 export const saveToken = async (token: string): Promise<void> => {
   try {
-    await SecureStore.setItemAsync('userToken', token);
+    await AsyncStorage.setItem('userToken', token);
   } catch (e) {
     console.warn('토큰 저장 실패:', e);
   }
@@ -72,7 +72,7 @@ export const saveToken = async (token: string): Promise<void> => {
  */
 export const clearToken = async (): Promise<void> => {
   try {
-    await SecureStore.deleteItemAsync('userToken');
+    await AsyncStorage.removeItem('userToken');
   } catch (e) {
     console.warn('토큰 삭제 실패:', e);
   }

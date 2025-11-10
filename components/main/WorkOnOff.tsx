@@ -83,13 +83,14 @@ export default function WorkOnOff() {
     const todayStr = dayjs().format('YYYY-MM-DD');
     const todayRecord = weeklyData?.find((r) => r.theDate === todayStr) ?? null;
     const isWeekend = [0, 6].includes(dayjs().day());
+    const isThisWeek = currentDate.isSame(dayjs(), 'week');
     return {
       todayRecord,
       canCheckOut: Boolean(todayRecord?.workOnTime && !todayRecord?.workOffTime),
-      canCheckIn: !todayRecord && !isWeekend,
+      canCheckIn: !todayRecord && !isWeekend && isThisWeek,
       effectiveWorkType: (todayRecord?.workType ?? selectedWorkType) as WorkType,
     };
-  }, [weeklyData, selectedWorkType]);
+  }, [weeklyData, selectedWorkType, currentDate]);
 
   const weeklyRecords = useMemo(() => buildWeeklyRecords(weeklyData, start), [weeklyData, start]);
 

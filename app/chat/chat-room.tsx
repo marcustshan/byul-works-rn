@@ -313,14 +313,14 @@ export default function ChatRoomScreen() {
   
     try {
       // 안전장치: 너무 오래 끌지 않도록 최대 N페이지
-      const MAX_HOPS = 10;
+      const MAX_HOPS = 30;
   
       for (let hop = 0; hop < MAX_HOPS; hop++) {
         // 더 불러올 과거가 없으면 중단
         if (!hasMoreMessagesRef.current || !minChatSeqRef.current) break;
   
         const pageRequest: ChatPageRequest = {
-          size: 50,                // 한 번에 좀 더 크게
+          size: 100,
           hasPrev: true,
           hasNext: false,
           prev: true,

@@ -201,11 +201,21 @@ export function hasCodeFence(raw: string) {
 }
 
 export function extractLinkFromMessage(raw: string) {
+  // 1) 우선 HTML/Markdown 태그 제거
+  const textOnly = raw.replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[[^\]]*\]\([^)]*\)/g, '');
+
+  // 2) URL 추출
   const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const matches = raw.match(urlRegex);
-  return matches?.map(url => {
-    return url.replace(/[', ";!?.)}\]>]+$/, '');
-  })
+  const matches = textOnly.match(urlRegex);
+  const links = matches?.map(url =>
+    url.replace(/[', ";!?.)}\]>]+$/, '')
+  ) || [];
+
+  return {
+    original: raw,
+    plainText: textOnly.trim(),
+    links,
+  };
 }
 
 export async function getLinkOpenGraph(url: string) {
