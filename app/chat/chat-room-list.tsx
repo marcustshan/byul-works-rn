@@ -32,6 +32,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { loadChatRooms } from '@/store/thunk/chatRoomThunk';
 
 import { selectMyMemberSeq } from '@/selectors/member/memberSelectors';
+import { extractLinkFromMessage } from '@/utils/chatUtil';
 import { getTextColorQuick } from '@/utils/colorUtil';
 import { useRouter } from 'expo-router';
 
@@ -192,10 +193,8 @@ export default function ChatRoomListScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
-          ListEmptyComponent={() =>
-            error
-              ? <ErrorState message={error} onRetry={() => dispatch(loadChatRooms())} colors={colors} />
-              : <EmptyState tab={tab} query={query} colors={colors} />
+          ListEmptyComponent={
+            <EmptyState tab={tab} query={query} colors={colors} />
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -270,7 +269,7 @@ const ChatListItem = React.memo(function ChatListItem({
   const unreadCount = room.newCnt ?? 0;
   const lastMessageMemberSeq = room.lastMsgMemberSeq ?? 0;
   const lastMessageMemberName = MemberService.getMemberName(lastMessageMemberSeq);
-  const lastMessage = lastMessageMemberName + ' : ' + room.lastInsertMsg;
+  const lastMessage = lastMessageMemberName + ' : ' + extractLinkFromMessage(room.lastInsertMsg).plainText;
   const lastTimestamp = room.lastInsertDate || room.createDate;
 
   let title = room.chatRoomName ?? '';
@@ -357,7 +356,7 @@ const ChatListItem = React.memo(function ChatListItem({
 });
 
 /* -------------------------------------------------------------------------- */
-/*                                  Empty/Error                                */
+/*                                  FlatList - Empty Component                */
 /* -------------------------------------------------------------------------- */
 
 const EmptyState = React.memo(function EmptyState({ query, tab, colors }: { query: string; tab: 'all' | 'unread'; colors: AppColors }) {
@@ -367,31 +366,6 @@ const EmptyState = React.memo(function EmptyState({ query, tab, colors }: { quer
       <ThemedText style={{ marginTop: 12, color: colors.textDim, fontSize: 16 }}>
         {query ? '검색 결과가 없어요.' : tab === 'unread' ? '안읽은 대화가 없어요.' : '아직 대화가 없어요. 새 채팅을 시작해보세요!'}
       </ThemedText>
-    </ThemedView>
-  );
-});
-
-const ErrorState = React.memo(function ErrorState({
-  message, onRetry, colors
-}: { message: string; onRetry: () => void; colors: AppColors }) {
-  return (
-    <ThemedView style={styles.emptyWrap}>
-      <Ionicons name="warning-outline" size={48} color={colors.danger} />
-      <ThemedText style={{ marginTop: 12, color: colors.danger, fontSize: 15, fontWeight: '700' }}>
-        {message}
-      </ThemedText>
-      <TouchableOpacity
-        onPress={onRetry}
-        style={[
-          styles.retryBtn,
-          { borderColor: colors.border, backgroundColor: colors.surfaceMuted },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="다시 시도"
-      >
-        <Ionicons name="refresh" size={16} color={colors.text} />
-        <ThemedText style={{ marginLeft: 6, color: colors.text }}>다시 시도</ThemedText>
-      </TouchableOpacity>
     </ThemedView>
   );
 });
