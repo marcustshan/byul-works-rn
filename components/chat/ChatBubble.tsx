@@ -60,6 +60,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
   const [showReadModal, setShowReadModal] = useState(false);
   const [showContentModal, setShowContentModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
+  const [fullMessage, setFullMessage] = useState('');
 
   const myMemberSeq = useAppSelector(selectMyMemberSeq) ?? 0;
 
@@ -258,7 +259,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
                 )}
                 <View style={styles.linkOpenGraphContent}>
                   <Text style={[styles.linkOpenGraphTitle, { color: c.text }]}>{linkOpenGraph.title || '제목 없음'}</Text>
-                  <Text style={[styles.linkOpenGraphDescription, { color: c.textDim }]}>{linkOpenGraph.description || '설명 없음'}</Text>
+                  <Text style={[styles.linkOpenGraphDescription, { color: c.textDim }]} numberOfLines={3}>{linkOpenGraph.description || '설명 없음'}</Text>
                 </View>
               </View>
             )}
@@ -274,7 +275,10 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
             onPress={() => {
               const raw = message.content ?? '';
               const longText = stripHtmlMentions(raw).length > 240;
-              if (longText || hasCodeFence(raw)) setShowContentModal(true);
+              if (longText || hasCodeFence(raw)) {
+                setFullMessage(raw);
+                setShowContentModal(true);
+              }
             }}
           >
             <View style={{ gap: 8 }}>
@@ -285,9 +289,12 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
                     code={seg.content}
                     lang={seg.lang}
                     dark={dark}
-                    showLineNumbers={false}
-                    wrapLongLines
-                    copyable
+                    mode="preview"
+                    maxPreviewLines={4}
+                    onShowMore={() => {
+                      setFullMessage(message.content);
+                      setShowContentModal(true);
+                    }}
                   />
                 ) : (
                   <Text key={`txt_${i}`} style={[styles.text, { color: c.text }]} selectable>
@@ -296,7 +303,7 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
                 )
               )}
               {preview.truncated && (
-                <Text style={{ color: c.tint, fontSize: 12, alignSelf: 'flex-end' }}>더보기</Text>
+                <Text style={{ color: c.tint, fontSize: 14, alignSelf: 'flex-end' }}>더보기</Text>
               )}
             </View>
           </Pressable>
@@ -406,9 +413,12 @@ export default function ChatBubble({ chatRoom, message, isMine, onScrollToMessag
         {showContentModal && (
           <FullMessageModal
             visible={showContentModal}
-            onClose={() => setShowContentModal(false)}
+            onClose={() => {
+              setFullMessage('');
+              setShowContentModal(false);
+            }}
             title="메시지"
-            content={message.content ?? ''}
+            content={fullMessage ?? ''}
             chatType={message.chatType as 'M' | 'I' | 'F' | 'L'}
           />
         )}
@@ -626,13 +636,13 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
   },
   linkOpenGraph: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     gap: 6,
     paddingVertical: 6,
     marginTop: 8
   },
-  linkOpenGraphImage: { width: 100, height: 100, resizeMode: 'cover' },
+  linkOpenGraphImage: { width: '100%', height: 100, resizeMode: 'cover' },
   linkOpenGraphContent: { flexDirection: 'column', gap: 2 },
   linkOpenGraphTitle: { fontSize: 12, fontWeight: '700', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' },
   linkOpenGraphDescription: { fontSize: 12, textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '100%' },

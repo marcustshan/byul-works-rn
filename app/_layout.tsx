@@ -17,7 +17,7 @@ import NotificationBell from '@/components/common/NotificationBell';
 import Footer from '@/components/layout/Footer';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { store } from '@/store';
+import { RootState, store } from '@/store';
 
 import { ToastProvider } from '@/components/common/Toast';
 import GlobalStompBridge from '@/components/GlobalStompBridge';
@@ -27,7 +27,10 @@ import { ensureFirebaseApp } from '@/config/firebaseConfig';
 
 // ⬇️ 앱 전역 테마 컨텍스트
 import { AuthService } from '@/api/authService';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setShowNotificationIcon } from '@/store/notificationSlice';
 import { ThemeProvider as AppThemeProvider } from '@/theme/ThemeProvider';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 ensureFirebaseApp();
 
@@ -41,10 +44,36 @@ function AppShell() {
 
   const currentPath = usePathname();
   const router = useRouter();
+  const dispatch = useAppDispatch();
+
+  const SHOW_NOTIFICATION_ICON_KEY = 'show_notification_icon';
+  useEffect(() => {
+    (async () => {
+      try {
+        const value = await AsyncStorage.getItem(SHOW_NOTIFICATION_ICON_KEY);
+
+        if (value === 'Y') {
+          dispatch(setShowNotificationIcon(true));
+        } else if (value === 'N') {
+          dispatch(setShowNotificationIcon(false));
+        } else {
+          // 저장된 값 없으면 기본값 true + 저장
+          dispatch(setShowNotificationIcon(true));
+          await AsyncStorage.setItem(SHOW_NOTIFICATION_ICON_KEY, 'Y');
+        }
+      } catch (e) {
+        // 에러 나면 일단 true로
+        dispatch(setShowNotificationIcon(true));
+      }
+    })();
+  }, [dispatch]);
 
   const needFooter = currentPath !== '/' && currentPath !== '/login';
   const needNotificationBell =
     currentPath !== '/' && currentPath !== '/login' && currentPath !== '/notifications';
+
+  const showNotificationIcon = useAppSelector((state: RootState) => state.notification.showNotificationIcon);
+  const shouldShowNotificationBell = needNotificationBell && showNotificationIcon;
 
   // React Navigation 테마를 현재 색상에 맞게 커스텀
   const navTheme = useMemo(() => {
@@ -109,7 +138,7 @@ function AppShell() {
           <Stack.Screen name="index" />
         </Stack>
 
-        {needNotificationBell && <NotificationBell />}
+        {shouldShowNotificationBell && <NotificationBell />}
         {needFooter && <Footer />}
 
         {/* 다크테마에서는 흰색 아이콘이 보이도록 */}

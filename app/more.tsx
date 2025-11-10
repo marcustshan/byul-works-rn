@@ -106,6 +106,16 @@ export default function MoreScreen() {
               {member.position || '직책 정보 없음'}
             </ThemedText>
           </View>
+          <TouchableOpacity
+            style={dynamicStyles.notificationButton}
+            onPress={() => router.push('/notifications')}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={24}
+              color={colorScheme === 'dark' ? '#4a9eff' : '#007AFF'}
+            />
+          </TouchableOpacity>
           <TouchableOpacity style={dynamicStyles.settingButton} onPress={() => router.push('/settings/settings')}>
             <Ionicons name="settings-outline" size={24} color={colorScheme === 'dark' ? '#4a9eff' : '#007AFF'} />
           </TouchableOpacity>
@@ -254,7 +264,8 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
   profileContainer: {
     margin: 20,
     marginBottom: 16,
-    padding: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
     borderRadius: 20,
     backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#ffffff',
     shadowColor: colorScheme === 'dark' ? '#000' : '#000',
@@ -274,7 +285,7 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
     marginBottom: 20,
   },
   profileImageContainer: {
-    marginRight: 20,
+    marginRight: 10,
     shadowColor: colorScheme === 'dark' ? '#000' : '#000',
     shadowOffset: {
       width: 0,
@@ -285,15 +296,15 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
     elevation: 8,
   },
   profileImage: {
-    width: 70,
-    height: 70,
+    width: 60,
+    height: 60,
     borderRadius: 35,
     borderWidth: 3,
     borderColor: colorScheme === 'dark' ? '#333' : '#e8e8e8',
   },
   profileImagePlaceholder: {
-    width: 70,
-    height: 70,
+    width: 60,
+    height: 60,
     borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
@@ -343,14 +354,14 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
     borderColor: colorScheme === 'dark' ? '#3a3a3a' : 'transparent',
   },
   profileName: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: 0,
     color: colors.text,
     letterSpacing: 0.5,
   },
   profilePosition: {
-    fontSize: 15,
+    fontSize: 14,
     color: colorScheme === 'dark' ? '#a0a0a0' : '#666',
     marginBottom: 4,
     fontWeight: '500',
@@ -473,6 +484,22 @@ const createStyles = (colors: typeof Colors.light, colorScheme: 'light' | 'dark'
     color: colorScheme === 'dark' ? '#a0a0a0' : '#666',
     fontWeight: '500',
     textAlign: 'center',
+  },
+  notificationButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: colorScheme === 'dark' ? '#2a2a2a' : '#f8f9fa',
+    shadowColor: colorScheme === 'dark' ? '#000' : '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: colorScheme === 'dark' ? 0.2 : 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+    borderWidth: colorScheme === 'dark' ? 1 : 0,
+    borderColor: colorScheme === 'dark' ? '#3a3a3a' : 'transparent',
+    marginRight: 8,
   },
 });
 

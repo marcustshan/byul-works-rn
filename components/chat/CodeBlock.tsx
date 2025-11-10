@@ -1,115 +1,146 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
+// components/chat/CodeBlock.tsx
 import React, { useMemo } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-// (선택) 프로젝트에 Toast가 있다면 사용
-import { Toast } from '@/components/common/Toast';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import SyntaxHighlighter from 'react-native-syntax-highlighter';
+import { atomOneDark, atomOneLight } from 'react-syntax-highlighter/src/styles/hljs';
 
 export type CodeBlockProps = {
   code: string;
-  lang?: string | null;   // 없으면 자동감지(hljs) 시도
-  dark?: boolean;         // 다크 테마 여부
-  showLineNumbers?: boolean;
-  wrapLongLines?: boolean; // 긴 줄 줄바꿈
-  copyable?: boolean;      // 상단 우측 복사 아이콘
+  lang?: string | null;
+  dark?: boolean;
+  mode?: 'preview' | 'full';
+  maxPreviewLines?: number;
+  onShowMore?: () => void;
 };
 
 function _CodeBlock({
   code,
   lang = null,
   dark = false,
-  showLineNumbers = false,
-  wrapLongLines = true,
-  copyable = true,
+  mode = 'full',
+  maxPreviewLines = 4,
+  onShowMore = () => {},
 }: CodeBlockProps) {
-  // 동적 require: Expo Go/웹 번들 이슈 회피 + 패키지 미설치 시 폴백
-  const { SyntaxHighlighter, styleTheme, canHighlight } = useMemo(() => {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const SyntaxHighlighter = require('react-native-syntax-highlighter').default;
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const styles = require('react-syntax-highlighter/dist/esm/styles/hljs');
-      const styleTheme = styles[dark ? 'atomOneDark' : 'atomOneLight'];
-      return { SyntaxHighlighter, styleTheme, canHighlight: true };
-    } catch {
-      return { SyntaxHighlighter: null, styleTheme: null, canHighlight: false };
-    }
-  }, [dark]);
+  const isPreview = mode === 'preview';
 
-  const handleCopy = async () => {
-    try {
-      await Clipboard.setStringAsync(code);
-      Toast?.show?.({ message: '코드를 복사했어요.', type: 'success' });
-    } catch {
-      // no-op
-    }
-  };
+  const trimmed = useMemo(() => {
+    // 1) 앞뒤 공백/빈줄 제거
+    let text = code.replace(/^\s*\n/, '').replace(/\s+$/, '');
 
-  // 하이라이트 가능 → hljs 자동감지 (언어 없으면 language 생략)
-  if (canHighlight && SyntaxHighlighter && styleTheme) {
-    const props: Record<string, any> = {
-      style: styleTheme,
-      highlighter: 'hljs', // ✅ 자동감지는 hljs에서만
-      showLineNumbers,
-      wrapLongLines,
-      PreTag: View, // RN 환경에서 불필요한 경고 방지
+    // 2) 외곽 <pre>, <code> 래퍼 제거
+    text = text
+      .replace(/^<pre[^>]*>/i, '')
+      .replace(/<\/pre>\s*$/i, '')
+      .replace(/^<code[^>]*>/i, '')
+      .replace(/<\/code>\s*$/i, '');
+
+    // 3) hljs가 뱉은 span 등 마크업이 섞인 경우 처리
+    //    class="hljs-..." 패턴이 있으면 "이미 하이라이트된 HTML"이라고 보고 HTML 제거
+    if (/hljs-/.test(text) || /class=["']hljs/.test(text)) {
+      // 태그 제거 + <br> → 개행
+      text = text
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '');
+
+      // 엔티티 디코딩 (&lt; &gt; &amp; 등)
+      text = text
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    }
+
+    return text;
+  }, [code]);
+
+  // preview일 때는 N줄만 보여주기
+  const { visibleCode, isClamped } = useMemo(() => {
+    const lines = trimmed.split('\n');
+    if (!isPreview) {
+      return { visibleCode: trimmed, isClamped: false };
+    }
+    if (lines.length <= maxPreviewLines) {
+      return { visibleCode: trimmed, isClamped: false };
+    }
+    return {
+      visibleCode: lines.slice(0, maxPreviewLines).join('\n'),
+      isClamped: true,
     };
-    if (lang) props.language = lang;
+  }, [trimmed, isPreview, maxPreviewLines]);
 
-    return (
-      <View style={[stylesWrap.container, { backgroundColor: dark ? '#121212' : '#f7f7f7' }]}>
-        {copyable && (
-          <Pressable style={stylesWrap.copyBtn} onPress={handleCopy} hitSlop={8}>
-            <Ionicons name="copy-outline" size={14} color={dark ? '#bbb' : '#555'} />
-          </Pressable>
-        )}
-        <SyntaxHighlighter {...props}>{code}</SyntaxHighlighter>
-      </View>
-    );
-  }
+  const theme = dark ? atomOneDark : atomOneLight;
 
-  // 폴백: 패키지 미설치/불가 시 모노스페이스 블록만
   return (
-    <ScrollView
-      horizontal={!wrapLongLines}
-      contentContainerStyle={[
-        stylesWrap.container,
-        { backgroundColor: dark ? '#1e1e1e' : '#f2f2f2', paddingVertical: 10, paddingHorizontal: 12 },
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: dark ? '#121212' : '#f7f7f7',
+        },
+        isPreview && styles.previewContainer,
       ]}
     >
-      {copyable && (
-        <Pressable style={stylesWrap.copyBtn} onPress={handleCopy} hitSlop={8}>
-          <Ionicons name="copy-outline" size={14} color={dark ? '#d0d0d0' : '#555'} />
-        </Pressable>
-      )}
-      <Text
-        selectable
-        style={{
-          color: dark ? '#dcdcdc' : '#222',
-          fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
-          fontSize: 13,
-          lineHeight: 19,
+      <SyntaxHighlighter
+        // 언어 지정 없으면 hljs 자동 감지
+        language={lang ?? undefined}
+        style={theme}
+        highlighter="hljs"
+        PreTag={View as any}
+        CodeTag={Text as any}
+        customStyle={{
+          margin: 0,
+          padding: 8,
+          backgroundColor: 'transparent',
+        }}
+        codeTagProps={{
+          style: {
+            fontFamily: Platform.select({
+              ios: 'Menlo',
+              android: 'monospace',
+              default: 'monospace',
+            }),
+            fontSize: 13,
+            lineHeight: 18,
+          },
         }}
       >
-        {code}
-      </Text>
-    </ScrollView>
+        {visibleCode}
+      </SyntaxHighlighter>
+
+      {isClamped && (
+        <Pressable onPress={onShowMore}>
+          <View style={styles.moreOverlay}>
+            <Text style={styles.moreText}>... 더보기</Text>
+          </View>
+        </Pressable>
+      )}
+    </View>
   );
 }
 
-const stylesWrap = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     borderRadius: 8,
+    position: 'relative',
     overflow: 'hidden',
   },
-  copyBtn: {
+  previewContainer: {
+    maxHeight: 110,
+  },
+  moreOverlay: {
     position: 'absolute',
-    right: 8,
-    top: 8,
-    zIndex: 2,
-    opacity: 0.7,
-    padding: 4,
-    borderRadius: 6,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    alignItems: 'flex-end',
+  },
+  moreText: {
+    fontSize: 12,
+    color: '#fff',
   },
 });
 

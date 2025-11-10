@@ -17,25 +17,63 @@ export function stripHtmlMentions(html: string) {
     .replace(/<[^>]+>/g, '');                // 나머지 태그 제거
 }
 
-/** ```lang\n ... \n``` 펜스 코드블록 파싱 (여러 개 지원) */
+/** ```lang\n ... \n``` 및 <pre>...</pre> 블록 모두 지원 */
 export function parseFencedBlocks(input: string): MsgSegment[] {
   if (!input) return [{ type: 'text', content: '' }];
 
-  const re = /```(\w+)?\r?\n([\s\S]*?)\r?\n```/g;
   const out: MsgSegment[] = [];
   let lastIndex = 0;
+
+  // ✅ <pre>...</pre> 또는 ```lang\n...\n``` 모두 매칭
+  const re = /(<pre[^>]*>[\s\S]*?<\/pre>)|(```(\w+)?\r?\n([\s\S]*?)\r?\n```)/gi;
   let m: RegExpExecArray | null;
 
   while ((m = re.exec(input))) {
     if (m.index > lastIndex) {
+      // 코드블록 앞의 일반 텍스트
       out.push({ type: 'text', content: input.slice(lastIndex, m.index) });
     }
-    out.push({ type: 'code', lang: m[1] ?? null, content: m[2] ?? '' });
+
+    // 1️⃣ ``` fenced code block
+    if (m[2]) {
+      const lang = m[3] ?? null;
+      const code = m[4] ?? '';
+      out.push({ type: 'code', lang, content: code });
+    }
+    // 2️⃣ <pre> ... </pre> block
+    else if (m[1]) {
+      const preBlock = m[1];
+      // 언어 추출
+      let lang: string | null = null;
+      const dataLangMatch = preBlock.match(/data-lang=["']([^"']+)["']/i);
+      if (dataLangMatch) lang = dataLangMatch[1];
+      else {
+        const classMatch = preBlock.match(/class=["']([^"']+)["']/i);
+        if (classMatch) {
+          const cls = classMatch[1];
+          const m2 =
+            cls.match(/language-([a-z0-9+#]+)/i) ??
+            cls.match(/lang-([a-z0-9+#]+)/i);
+          if (m2) lang = m2[1];
+        }
+      }
+
+      const innerMatch = preBlock.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+      const inner = innerMatch
+        ? innerMatch[1]
+        : preBlock.replace(/^<pre[^>]*>/i, '').replace(/<\/pre>$/i, '');
+
+      out.push({ type: 'code', lang, content: inner });
+    }
+
     lastIndex = re.lastIndex;
   }
+
   if (lastIndex < input.length) {
+    // 마지막 코드블록 뒤의 텍스트
     out.push({ type: 'text', content: input.slice(lastIndex) });
   }
+
   return out.length ? out : [{ type: 'text', content: input }];
 }
 
@@ -156,9 +194,10 @@ export function aggregateReactions(
   return { list, hasAny: list.length > 0, defaultKey: myFirst };
 }
 
-/** (선택) 메시지에 펜스 코드블록이 포함되어 있는지 */
+/** 메시지에 코드블록(``` 또는 <pre>)이 포함되어 있는지 */
 export function hasCodeFence(raw: string) {
-  return /```/.test(raw ?? '');
+  if (!raw) return false;
+  return /```/.test(raw) || /<pre[^>]*>[\s\S]*?<\/pre>/i.test(raw);
 }
 
 export function extractLinkFromMessage(raw: string) {

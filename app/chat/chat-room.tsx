@@ -191,7 +191,7 @@ export default function ChatRoomScreen() {
         chatRoomName: roomTitle,
         memberSeq,
         memberName,
-        profileColor: null,
+        profileColor: MemberService.getMemberProfileColor(memberSeq),
         chatType,
         content: '',
         emojiPath: null,
@@ -240,7 +240,7 @@ export default function ChatRoomScreen() {
       chatRoomName: roomTitle,
       memberSeq,
       memberName,
-      profileColor: null,
+      profileColor: MemberService.getMemberProfileColor(memberSeq),
       chatType: 'E',
       content: '',
       emojiPath,
@@ -415,6 +415,7 @@ export default function ChatRoomScreen() {
     }
 
     incoming.memberName = MemberService.getMemberName(incoming.memberSeq);
+    incoming.profileColor = MemberService.getMemberProfileColor(incoming.memberSeq);
     ChatSocketService.sendReadMessage(memberSeq, chatRoomSeq, incoming.chatSeq);
     setMessages((prev) => {
       // ❗중복 방지 (chatSeq가 서버 고유키라면 이걸로 충분)
@@ -496,11 +497,13 @@ export default function ChatRoomScreen() {
         }));
 
         // 내가 하단 근처일 때만 자동 스크롤(선택)
-        requestAnimationFrame(() => {
-          // inverted=true 이므로 'offset 0'이 맨 아래
-          // 조건 로직이 있으면 넣고, 단순하게는 무조건 붙여도 OK
-          listRef.current?.scrollToOffset({ offset: 0, animated: true });
-        });
+        if (!showScrollToBottom) {
+          requestAnimationFrame(() => {
+            // inverted=true 이므로 'offset 0'이 맨 아래
+            // 조건 로직이 있으면 넣고, 단순하게는 무조건 붙여도 OK
+            listRef.current?.scrollToOffset({ offset: 0, animated: true });
+          });
+        }
       });
 
       roomSubRef.current = sub;
@@ -512,7 +515,6 @@ export default function ChatRoomScreen() {
     connectAndSubscribe();
 
     return () => {
-      console.log('채팅방 구독 모두 해제');
       canceled = true;
       roomSubRef.current?.unsubscribe?.();
       roomSubRef.current = null;
@@ -610,7 +612,7 @@ export default function ChatRoomScreen() {
       chatRoomName: roomTitle,
       memberSeq,
       memberName,
-      profileColor: null,
+      profileColor: MemberService.getMemberProfileColor(memberSeq),
       chatType: 'M',
       content: trimmed,
       emojiPath: null,

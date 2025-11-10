@@ -4,11 +4,15 @@ import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 // ⬇️ 변경: react-native의 useColorScheme 대신 우리 컨텍스트 훅 사용
 import { Toast } from '@/components/common/Toast';
 import { useThemePreference } from '@/hooks/use-color-scheme';
+import { RootState } from '@/store';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setShowNotificationIcon } from '@/store/notificationSlice';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Opt = 'system' | 'light' | 'dark';
 
@@ -24,6 +28,11 @@ export default function SettingsScreen() {
   const c = Colors[colorScheme ?? 'light'];
   const router = useRouter();
 
+  const dispatch = useAppDispatch();
+
+  const showNotificationIcon = useAppSelector((state: RootState) => state.notification.showNotificationIcon);
+  const SHOW_NOTIFICATION_ICON_KEY = 'show_notification_icon';
+
   const handleThemeChange = (key: Opt) => {
     Toast.show({
       message: '테마가 변경됩니다.\n시간이 좀 걸릴 수 있습니다.',
@@ -34,14 +43,29 @@ export default function SettingsScreen() {
     }, 100);
   };
 
+  const onChangeShowNotificationIcon = (value: boolean) => {
+    dispatch(setShowNotificationIcon(value));
+    AsyncStorage.setItem(SHOW_NOTIFICATION_ICON_KEY, value ? 'Y' : 'N').catch(() => {});
+  };
+
   return (
     <ThemedView style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.back}>
           <Ionicons name="chevron-back" size={24} color={c.text} />
         </Pressable>
-        <ThemedText type="title">설정</ThemedText>
+        <ThemedText type="title" style={styles.title}>설정</ThemedText>
         <View style={{ width: 24 }} />
+      </View>
+
+      <View style={styles.notificationIconSection}>
+        <ThemedText type="subtitle" style={styles.notificationIconSectionTitle}>알림 아이콘 보이기</ThemedText>
+        <Switch
+          value={showNotificationIcon}
+          onValueChange={onChangeShowNotificationIcon}
+          trackColor={{ true: c.tint, false: c.border }}
+          thumbColor={c.onPrimary}
+        />
       </View>
 
       <View style={styles.section}>
@@ -81,4 +105,7 @@ const styles = StyleSheet.create({
   rowLeft: { flexShrink: 1, paddingRight: 12 },
   rowTitle: { fontSize: 16, fontWeight: '600' },
   rowDesc: { fontSize: 12, opacity: 0.7, marginTop: 2 },
+  title: { fontSize: 22, fontWeight: '600' },
+  notificationIconSection: { marginTop: 12, paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  notificationIconSectionTitle: { fontSize: 16, fontWeight: '600' },
 });

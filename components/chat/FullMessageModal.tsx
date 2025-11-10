@@ -88,7 +88,7 @@ export default function FullMessageModal({
 
           {/* 본문: 코드 블록/일반 텍스트 혼합 렌더 */}
           <ScrollView
-            style={{ maxHeight: 420 }}
+            style={{ maxHeight: 450 }}
             contentContainerStyle={{ paddingBottom: 8, gap: 12 }}
           >
             {segments.map((seg, i) =>
@@ -96,10 +96,9 @@ export default function FullMessageModal({
                 <CodeBlock
                   key={`m_code_${i}`}
                   code={seg.content}
-                  lang={seg.lang ?? undefined}
+                  lang={seg.lang}
                   dark={dark}
-                  wrapLongLines
-                  copyable
+                  mode="full"
                 />
               ) : (
                 <Text

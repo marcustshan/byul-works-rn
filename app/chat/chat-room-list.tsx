@@ -92,7 +92,7 @@ export default function ChatRoomListScreen() {
   const onRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
-      await dispatch(loadChatRooms()).unwrap();
+      await dispatch(loadChatRooms());
     } finally {
       setRefreshing(false);
     }
@@ -119,8 +119,7 @@ export default function ChatRoomListScreen() {
   }, [chatRoomList, tab, query]);
 
   const renderItem: ListRenderItem<ChatRoom> = useCallback(({ item }) => (
-    // 🔻 카드 대신 Pressable로 “플랫한” 아이템
-    <ChatListItem room={item} colors={colors} memberSeq={memberSeq} onPress={() => openRoom(item)} />
+    <ChatListItem room={item} colors={colors} memberSeq={memberSeq ?? 0} onPress={() => openRoom(item)} />
   ), [colors, memberSeq, openRoom]);
 
   const keyExtractor = useCallback((item: ChatRoom) => String(item.chatRoomSeq), []);
